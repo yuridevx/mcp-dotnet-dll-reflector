@@ -191,16 +191,16 @@ public class Extractor
 
     private string GetTypeKind(TypeDef type)
     {
-        if (type.IsEnum) return "Enum";
-        if (type.IsPrimitive) return "Primitive";
-        if (type.BaseType is { FullName: "System.MulticastDelegate" }) return "Delegate";
-        if (type.IsValueType) return "Struct";
-        if (type.IsInterface) return "Interface";
-        if (type.IsAbstract && type.IsSealed) return "Static Class";
-        if (type.IsAbstract) return "Abstract Class";
-        if (type.IsSealed) return "Sealed Class";
-        if (type.IsClass) return "Class";
-        return "Other";
+        if (type.IsEnum) return "enum";
+        if (type.IsPrimitive) return "primitive";
+        if (type.BaseType is { FullName: "System.MulticastDelegate" }) return "delegate";
+        if (type.IsValueType) return "struct";
+        if (type.IsInterface) return "interface";
+        if (type.IsAbstract && type.IsSealed) return "static class";
+        if (type.IsAbstract) return "abstract class";
+        if (type.IsSealed) return "sealed class";
+        if (type.IsClass) return "class";
+        return "other";
     }
 
     private List<EnumValueMetadata> GetEnumValues(TypeDef type)

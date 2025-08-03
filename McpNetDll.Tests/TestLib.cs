@@ -263,10 +263,10 @@ public class ExtractorTests
         var myTestLibraryNamespace = namespaces.EnumerateArray().First();
         Assert.True(myTestLibraryNamespace.TryGetProperty("Types", out var types));
 
-        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyPublicClass" && t.GetProperty("TypeKind").GetString() == "Class");
-        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "IMyInterface" && t.GetProperty("TypeKind").GetString() == "Interface");
-        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyEnum" && t.GetProperty("TypeKind").GetString() == "Enum");
-        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyStruct" && t.GetProperty("TypeKind").GetString() == "Struct");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyPublicClass" && t.GetProperty("TypeKind").GetString() == "class");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "IMyInterface" && t.GetProperty("TypeKind").GetString() == "interface");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyEnum" && t.GetProperty("TypeKind").GetString() == "enum");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyStruct" && t.GetProperty("TypeKind").GetString() == "struct");
     }
 
     [Fact]
@@ -284,14 +284,14 @@ public class ExtractorTests
         Assert.Equal(3, types.EnumerateArray().Count());
 
         var myEnum = types.EnumerateArray().FirstOrDefault(t => t.GetProperty("Name").GetString() == "MyEnum");
-        Assert.Equal("Enum", myEnum.GetProperty("TypeKind").GetString());
+        Assert.Equal("enum", myEnum.GetProperty("TypeKind").GetString());
         Assert.True(myEnum.TryGetProperty("EnumValues", out var enumValues));
         Assert.Contains(enumValues.EnumerateArray(), ev => ev.GetProperty("Name").GetString() == "ValueA" && ev.GetProperty("Value").GetString() == "0");
         Assert.Contains(enumValues.EnumerateArray(), ev => ev.GetProperty("Name").GetString() == "ValueB" && ev.GetProperty("Value").GetString() == "10");
         Assert.Contains(enumValues.EnumerateArray(), ev => ev.GetProperty("Name").GetString() == "ValueC" && ev.GetProperty("Value").GetString() == "11");
 
         var myStruct = types.EnumerateArray().FirstOrDefault(t => t.GetProperty("Name").GetString() == "MyStruct");
-        Assert.Equal("Struct", myStruct.GetProperty("TypeKind").GetString());
+        Assert.Equal("struct", myStruct.GetProperty("TypeKind").GetString());
         Assert.True(myStruct.TryGetProperty("Properties", out var structProperties));
         Assert.Contains(structProperties.EnumerateArray(), p => p.GetProperty("Name").GetString() == "Number");
         Assert.Contains(structProperties.EnumerateArray(), p => p.GetProperty("Name").GetString() == "Text");
@@ -299,7 +299,7 @@ public class ExtractorTests
         Assert.Contains(structMethods.EnumerateArray(), m => m.GetProperty("Name").GetString() == "GetInfo");
 
         var myGenericClass = types.EnumerateArray().FirstOrDefault(t => t.GetProperty("Name").GetString() == "MyGenericClass`1");
-        Assert.Equal("Class", myGenericClass.GetProperty("TypeKind").GetString());
+        Assert.Equal("class", myGenericClass.GetProperty("TypeKind").GetString());
         Assert.True(myGenericClass.TryGetProperty("Properties", out var genericProperties));
         Assert.Contains(genericProperties.EnumerateArray(), p => p.GetProperty("Name").GetString() == "Value");
         Assert.True(myGenericClass.TryGetProperty("Methods", out var genericMethods));
@@ -351,7 +351,7 @@ public class ExtractorTests
 
         var myStruct = types.EnumerateArray().First();
         Assert.Equal("MyExplicitStruct", myStruct.GetProperty("Name").GetString());
-        Assert.Equal("Struct", myStruct.GetProperty("TypeKind").GetString());
+        Assert.Equal("struct", myStruct.GetProperty("TypeKind").GetString());
 
         // Check StructLayout
         Assert.True(myStruct.TryGetProperty("StructLayout", out var layout));
