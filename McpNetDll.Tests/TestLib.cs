@@ -37,12 +37,12 @@ public class ExtractorTests
 
         var myTestLibraryNamespace = namespaces.EnumerateArray().First(ns => ns.GetProperty("Name").GetString() == "MyTestLibrary");
         Assert.NotNull(myTestLibraryNamespace);
-        Assert.Equal(5, myTestLibraryNamespace.GetProperty("ClassCount").GetInt32()); // MyPublicClass, IMyInterface, MyEnum, MyStruct, MyGenericClass`1
-        Assert.Contains("MyPublicClass", myTestLibraryNamespace.GetProperty("ClassNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("IMyInterface", myTestLibraryNamespace.GetProperty("ClassNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("MyEnum", myTestLibraryNamespace.GetProperty("ClassNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("MyStruct", myTestLibraryNamespace.GetProperty("ClassNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("MyGenericClass`1", myTestLibraryNamespace.GetProperty("ClassNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.Equal(5, myTestLibraryNamespace.GetProperty("TypeCount").GetInt32()); // MyPublicClass, IMyInterface, MyEnum, MyStruct, MyGenericClass`1
+        Assert.Contains("MyPublicClass", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.Contains("IMyInterface", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.Contains("MyEnum", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.Contains("MyStruct", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.Contains("MyGenericClass`1", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
     }
 
     [Fact]
@@ -259,8 +259,8 @@ public class ExtractorTests
         Assert.True(result.TryGetProperty("Namespaces", out var namespaces));
         var myTestLibraryNamespace = namespaces.EnumerateArray().First(ns => ns.GetProperty("Name").GetString() == "MyTestLibrary");
         Assert.NotNull(myTestLibraryNamespace);
-        Assert.Contains("MyEnum", myTestLibraryNamespace.GetProperty("ClassNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("MyStruct", myTestLibraryNamespace.GetProperty("ClassNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.Contains("MyEnum", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.Contains("MyStruct", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
     }
 
     [Fact]

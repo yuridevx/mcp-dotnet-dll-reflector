@@ -20,8 +20,8 @@ public class Extractor
             .Select(g => new NamespaceMetadata
             {
                 Name = g.Key,
-                ClassCount = g.Count(),
-                ClassNames = g.Select(t => t.Name.String).ToList()
+                TypeCount = g.Count(),
+                TypeNames = g.Select(t => t.Name.String).ToList()
             })
             .OrderBy(ns => ns.Name)
             .ToList();
@@ -225,8 +225,8 @@ public class AssemblyMetadata
 public class NamespaceMetadata
 {
     public required string Name { get; init; }
-    public required int ClassCount { get; init; }
-    public required List<string> ClassNames { get; init; }
+    public required int TypeCount { get; init; }
+    public required List<string> TypeNames { get; init; }
 }
 
 public class TypeMetadata
