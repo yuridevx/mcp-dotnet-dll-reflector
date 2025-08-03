@@ -7,7 +7,7 @@ namespace McpNetDll;
 public class Extractor
 {
     // New public API
-    public string ListNamespaces(string assemblyPath)
+    public string ListNamespaces(string assemblyPath, string[]? namespaces = null)
     {
         var allTypes = LoadPublicTypes(assemblyPath, out var error);
         if (error != null)
@@ -15,64 +15,44 @@ public class Extractor
             return JsonSerializer.Serialize(new { error });
         }
 
-        var namespaceInfo = allTypes
+        IEnumerable<TypeDef> typesToProcess = allTypes;
+        if (namespaces != null && namespaces.Length > 0)
+        {
+            var availableNamespaces = allTypes.Select(t => t.Namespace.String).Distinct().ToList();
+            var notFoundNamespaces = namespaces.Where(ns => !availableNamespaces.Contains(ns)).ToList();
+            if (notFoundNamespaces.Any())
+            {
+                return JsonSerializer.Serialize(new {
+                    error = $"Namespace(s) not found: {string.Join(", ", notFoundNamespaces)}",
+                    availableNamespaces = availableNamespaces.OrderBy(ns => ns).ToList()
+                });
+            }
+            typesToProcess = allTypes.Where(t => namespaces.Contains(t.Namespace.String));
+        }
+
+        var namespaceInfo = typesToProcess
             .GroupBy(t => t.Namespace.String)
             .Select(g => new NamespaceMetadata
             {
                 Name = g.Key,
                 TypeCount = g.Count(),
-                TypeNames = g.Select(t => t.Name.String).ToList()
+                Types = g.Select(type => new TypeMetadata
+                {
+                    Name = type.Name.String,
+                    Namespace = type.Namespace.String,
+                    FullName = type.FullName,
+                    TypeKind = GetTypeKind(type),
+                    MethodCount = type.Methods.Count(m => m.IsPublic && !m.IsConstructor && !m.IsGetter && !m.IsSetter),
+                    PropertyCount = type.Properties.Count(p => p.GetMethods.Any(gm => gm?.IsPublic ?? false)),
+                    Methods = null,
+                    Properties = null,
+                    EnumValues = type.IsEnum ? GetEnumValues(type) : null
+                }).OrderBy(t => t.Name).ToList()
             })
             .OrderBy(ns => ns.Name)
             .ToList();
 
         return JsonSerializer.Serialize(new { Namespaces = namespaceInfo },
-            new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
-    }
-
-    public string ListTypesInNamespaces(string assemblyPath, string[] namespaces)
-    {
-        if (namespaces == null || namespaces.Length == 0)
-        {
-            return JsonSerializer.Serialize(new { error = "Namespaces array cannot be empty." });
-        }
-        
-        var allTypes = LoadPublicTypes(assemblyPath, out var error);
-        if (error != null)
-        {
-            return JsonSerializer.Serialize(new { error });
-        }
-
-        var availableNamespaces = allTypes.Select(t => t.Namespace.String).Distinct().ToList();
-        var notFoundNamespaces = namespaces.Where(ns => !availableNamespaces.Contains(ns)).ToList();
-        
-        if (notFoundNamespaces.Any())
-        {
-            return JsonSerializer.Serialize(new {
-                error = $"Namespace(s) not found: {string.Join(", ", notFoundNamespaces)}",
-                availableNamespaces = availableNamespaces.OrderBy(ns => ns).ToList()
-            });
-        }
-
-        var filteredTypes = allTypes
-            .Where(t => namespaces.Contains(t.Namespace.String))
-            .Select(type => new TypeMetadata
-            {
-                Name = type.Name.String,
-                Namespace = type.Namespace.String,
-                FullName = type.FullName,
-                TypeKind = GetTypeKind(type),
-                MethodCount = type.Methods.Count(m => m.IsPublic && !m.IsConstructor && !m.IsGetter && !m.IsSetter),
-                PropertyCount = type.Properties.Count(p => p.GetMethods.Any(gm => gm?.IsPublic ?? false)),
-                Methods = null,
-                Properties = null,
-                EnumValues = type.IsEnum ? GetEnumValues(type) : null
-            })
-            .OrderBy(t => t.Namespace)
-            .ThenBy(t => t.Name)
-            .ToList();
-
-        return JsonSerializer.Serialize(new { Types = filteredTypes },
             new JsonSerializerOptions { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
     }
 
@@ -226,7 +206,7 @@ public class NamespaceMetadata
 {
     public required string Name { get; init; }
     public required int TypeCount { get; init; }
-    public required List<string> TypeNames { get; init; }
+    public required List<TypeMetadata> Types { get; init; }
 }
 
 public class TypeMetadata

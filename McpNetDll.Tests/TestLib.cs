@@ -38,36 +38,39 @@ public class ExtractorTests
         var myTestLibraryNamespace = namespaces.EnumerateArray().First(ns => ns.GetProperty("Name").GetString() == "MyTestLibrary");
         Assert.NotNull(myTestLibraryNamespace);
         Assert.Equal(5, myTestLibraryNamespace.GetProperty("TypeCount").GetInt32()); // MyPublicClass, IMyInterface, MyEnum, MyStruct, MyGenericClass`1
-        Assert.Contains("MyPublicClass", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("IMyInterface", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("MyEnum", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("MyStruct", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("MyGenericClass`1", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.True(myTestLibraryNamespace.TryGetProperty("Types", out var types));
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyPublicClass");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "IMyInterface");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyEnum");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyStruct");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyGenericClass`1");
     }
 
     [Fact]
-    public void ListTypesInNamespaces_ShouldReturnClassInfo_WhenFilteredByNamespace()
+    public void ListNamespaces_ShouldReturnFilteredTypeInfo_WhenFilteredByNamespace()
     {
         // Arrange
-        string[] namespaces = { "MyTestLibrary" };
+        string[] namespacesFilter = { "MyTestLibrary" };
 
         // Act
-        var resultJson = _extractor.ListTypesInNamespaces(_testDllPath, namespaces);
+        var resultJson = _extractor.ListNamespaces(_testDllPath, namespacesFilter);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
-        Assert.True(result.TryGetProperty("Types", out var types));
-        Assert.Equal(5, types.EnumerateArray().Count()); // Now expecting 5 types (Class, Interface, Enum, Struct, Generic Class)
+        Assert.True(result.TryGetProperty("Namespaces", out var namespaces));
+        Assert.Single(namespaces.EnumerateArray());
 
-        // There are now multiple types, so we check for specific types rather than a single 'myPublicClass'
+        var myTestLibraryNamespace = namespaces.EnumerateArray().First();
+        Assert.True(myTestLibraryNamespace.TryGetProperty("Types", out var types));
+        Assert.Equal(5, types.EnumerateArray().Count());
+
         var myPublicClass = types.EnumerateArray().First(t => t.GetProperty("Name").GetString() == "MyPublicClass");
-        // No longer Assert.NotNull(myPublicClass); as we'll assert properties directly
         Assert.Equal("MyTestLibrary", myPublicClass.GetProperty("Namespace").GetString());
         Assert.Equal("MyTestLibrary.MyPublicClass", myPublicClass.GetProperty("FullName").GetString());
-        Assert.True(myPublicClass.GetProperty("MethodCount").GetInt32() > 0); // Check if methods are counted
-        Assert.True(myPublicClass.GetProperty("PropertyCount").GetInt32() > 0); // Check if properties are counted
-        Assert.False(myPublicClass.TryGetProperty("Methods", out _)); // Should not contain detailed methods
-        Assert.False(myPublicClass.TryGetProperty("Properties", out _)); // Should not contain detailed properties
+        Assert.True(myPublicClass.GetProperty("MethodCount").GetInt32() > 0);
+        Assert.True(myPublicClass.GetProperty("PropertyCount").GetInt32() > 0);
+        Assert.False(myPublicClass.TryGetProperty("Methods", out _));
+        Assert.False(myPublicClass.TryGetProperty("Properties", out _));
     }
 
     [Fact]
@@ -75,7 +78,7 @@ public class ExtractorTests
     {
         // Act
         var resultJsonNamespace = _extractor.ListNamespaces(_testDllPath);
-        var resultJsonClass = _extractor.ListTypesInNamespaces(_testDllPath, new[] { "MyTestLibrary" });
+        var resultJsonClass = _extractor.ListNamespaces(_testDllPath, new[] { "MyTestLibrary" });
         var resultJsonMember = _extractor.GetTypeDetails(_testDllPath, new[] { "MyTestLibrary.MyPublicClass" });
 
         var resultNamespace = JsonSerializer.Deserialize<JsonElement>(resultJsonNamespace);
@@ -88,7 +91,9 @@ public class ExtractorTests
         Assert.False(myTestLibraryNamespace.TryGetProperty("Documentation", out _));
 
         // Assert for Class data (no 'Documentation' field expected)
-        Assert.True(resultClass.TryGetProperty("Types", out var typesClass));
+        Assert.True(resultClass.TryGetProperty("Namespaces", out var namespacesClass));
+        var myTestLibraryNamespaceForClasses = namespacesClass.EnumerateArray().First();
+        Assert.True(myTestLibraryNamespaceForClasses.TryGetProperty("Types", out var typesClass));
         var myPublicClassForClasses = typesClass.EnumerateArray().First(t => t.GetProperty("Name").GetString() == "MyPublicClass");
         Assert.False(myPublicClassForClasses.TryGetProperty("Documentation", out _));
 
@@ -171,20 +176,6 @@ public class ExtractorTests
         Assert.Equal("Assembly file not found.", error.GetString());
     }
 
-    [Fact]
-    public void ListTypesInNamespaces_ShouldReturnError_WhenEmptyNamespacesArray()
-    {
-        // Arrange
-        string[] namespaces = { };
-
-        // Act
-        var resultJson = _extractor.ListTypesInNamespaces(_testDllPath, namespaces);
-        var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
-
-        // Assert
-        Assert.True(result.TryGetProperty("error", out var error));
-        Assert.Equal("Namespaces array cannot be empty.", error.GetString());
-    }
 
     [Fact]
     public void GetTypeDetails_ShouldReturnError_WhenEmptyClassNamesArray()
@@ -220,13 +211,13 @@ public class ExtractorTests
     }
 
     [Fact]
-    public void ListTypesInNamespaces_ShouldReturnError_WhenNamespaceNotFound()
+    public void ListNamespaces_ShouldReturnError_WhenNamespaceNotFound()
     {
         // Arrange
         string[] namespaces = { "NonExistentNamespace" };
 
         // Act
-        var resultJson = _extractor.ListTypesInNamespaces(_testDllPath, namespaces);
+        var resultJson = _extractor.ListNamespaces(_testDllPath, namespaces);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -259,20 +250,24 @@ public class ExtractorTests
         Assert.True(result.TryGetProperty("Namespaces", out var namespaces));
         var myTestLibraryNamespace = namespaces.EnumerateArray().First(ns => ns.GetProperty("Name").GetString() == "MyTestLibrary");
         Assert.NotNull(myTestLibraryNamespace);
-        Assert.Contains("MyEnum", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
-        Assert.Contains("MyStruct", myTestLibraryNamespace.GetProperty("TypeNames").EnumerateArray().Select(c => c.GetString()));
+        Assert.True(myTestLibraryNamespace.TryGetProperty("Types", out var types));
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyEnum");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyStruct");
     }
 
     [Fact]
     public void Extractor_ShouldIncludeTypeKindInMetadata()
     {
         // Arrange & Act
-        string[] namespaces = { "MyTestLibrary" };
-        var resultJson = _extractor.ListTypesInNamespaces(_testDllPath, namespaces);
+        string[] filter = { "MyTestLibrary" };
+        var resultJson = _extractor.ListNamespaces(_testDllPath, filter);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
-        Assert.True(result.TryGetProperty("Types", out var types));
+        Assert.True(result.TryGetProperty("Namespaces", out var namespaces));
+        var myTestLibraryNamespace = namespaces.EnumerateArray().First();
+        Assert.True(myTestLibraryNamespace.TryGetProperty("Types", out var types));
+
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyPublicClass" && t.GetProperty("TypeKind").GetString() == "Class");
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "IMyInterface" && t.GetProperty("TypeKind").GetString() == "Interface");
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyEnum" && t.GetProperty("TypeKind").GetString() == "Enum");

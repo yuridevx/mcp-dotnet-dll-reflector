@@ -7,25 +7,16 @@ namespace McpNetDll;
 public static class DllMetadataTool
 {
     [McpServerTool,
-     Description("Lists all public namespaces in the assembly. This is the recommended starting point for exploring the library's structure.")]
+     Description(
+         "Lists all public namespaces and their types in the assembly. If no namespaces are specified, it returns all namespaces. If namespaces are provided, it returns detailed type information for those namespaces only.")]
     public static string ListNamespaces(
         Extractor extractor,
         [Description("The absolute path to the DLL file.")]
-        string dllPath)
-    {
-        return extractor.ListNamespaces(dllPath);
-    }
-
-    [McpServerTool,
-     Description("Lists all public .NET types (including classes, structs, enums, and interfaces) within the specified namespaces.")]
-    public static string ListTypesInNamespaces(
-        Extractor extractor,
-        [Description("The absolute path to the DLL file.")]
         string dllPath,
-        [Description("An array of namespace names to inspect. Use `ListNamespaces` to discover available namespaces.")]
-        string[] namespaces)
+        [Description("Optional: An array of namespace names to inspect. If omitted, all namespaces will be listed.")]
+        string[]? namespaces = null)
     {
-        return extractor.ListTypesInNamespaces(dllPath, namespaces);
+        return extractor.ListNamespaces(dllPath, namespaces);
     }
 
     [McpServerTool,
