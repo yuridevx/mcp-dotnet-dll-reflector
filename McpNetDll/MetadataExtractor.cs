@@ -117,7 +117,7 @@ public class Extractor
         {
             var module = ModuleDefMD.Load(assemblyPath);
             var publicTypes = module.Types
-                .Where(t => t.IsPublic && (t.IsClass || t.IsInterface || t.IsEnum || t.IsValueType))
+                .Where(t => t.IsPublic)
                 .ToList();
             return processor(publicTypes);
         }
@@ -192,8 +192,13 @@ public class Extractor
     private string GetTypeKind(TypeDef type)
     {
         if (type.IsEnum) return "Enum";
-        if (type.IsValueType && !type.IsPrimitive) return "Struct";
+        if (type.IsPrimitive) return "Primitive";
+        if (type.BaseType is { FullName: "System.MulticastDelegate" }) return "Delegate";
+        if (type.IsValueType) return "Struct";
         if (type.IsInterface) return "Interface";
+        if (type.IsAbstract && type.IsSealed) return "Static Class";
+        if (type.IsAbstract) return "Abstract Class";
+        if (type.IsSealed) return "Sealed Class";
         if (type.IsClass) return "Class";
         return "Other";
     }
