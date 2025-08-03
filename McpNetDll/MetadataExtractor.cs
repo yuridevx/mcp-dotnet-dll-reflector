@@ -15,10 +15,10 @@ public class Extractor
             return JsonSerializer.Serialize(new { error });
         }
 
-        IEnumerable<TypeDef> typesToProcess = allTypes;
+        IEnumerable<TypeDef> typesToProcess = allTypes ?? Enumerable.Empty<TypeDef>();
         if (namespaces != null && namespaces.Length > 0)
         {
-            var availableNamespaces = allTypes.Select(t => t.Namespace.String).Distinct().ToList();
+            var availableNamespaces = (allTypes ?? Enumerable.Empty<TypeDef>()).Select(t => t.Namespace.String).Distinct().ToList();
             var notFoundNamespaces = namespaces.Where(ns => !availableNamespaces.Contains(ns)).ToList();
             if (notFoundNamespaces.Any())
             {
@@ -27,7 +27,7 @@ public class Extractor
                     availableNamespaces = availableNamespaces.OrderBy(ns => ns).ToList()
                 });
             }
-            typesToProcess = allTypes.Where(t => namespaces.Contains(t.Namespace.String));
+            typesToProcess = (allTypes ?? Enumerable.Empty<TypeDef>()).Where(t => namespaces.Contains(t.Namespace.String));
         }
 
         var namespaceInfo = typesToProcess
@@ -74,7 +74,7 @@ public class Extractor
 
         foreach (var nameToFind in typeNames)
         {
-            var foundTypes = allTypes.Where(t =>
+            var foundTypes = (allTypes ?? Enumerable.Empty<TypeDef>()).Where(t =>
                 t.FullName.Equals(nameToFind, StringComparison.OrdinalIgnoreCase) ||
                 t.Name.String.Equals(nameToFind, StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -94,7 +94,7 @@ public class Extractor
         {
             return JsonSerializer.Serialize(new {
                 error = $"Type(s) not found: {string.Join(", ", notFoundTypes)}",
-                availableTypes = allTypes.Select(t => t.FullName).OrderBy(cn => cn).ToList()
+                availableTypes = (allTypes ?? Enumerable.Empty<TypeDef>()).Select(t => t.FullName).OrderBy(cn => cn).ToList()
             });
         }
 
@@ -126,7 +126,9 @@ public class Extractor
                        Name = prop.Name.String,
                        Type = prop.PropertySig.RetType.FullName
                    }).ToList(),
-                EnumValues = type.IsEnum ? GetEnumValues(type) : null
+                EnumValues = type.IsEnum ? GetEnumValues(type) : null,
+                StructLayout = !type.IsEnum ? GetStructLayout(type) : null,
+                Fields = !type.IsEnum ? GetFields(type) : null
             })
             .OrderBy(t => t.FullName)
             .ToList();
@@ -193,6 +195,41 @@ public class Extractor
             })
             .ToList();
     }
+
+    private StructLayoutMetadata? GetStructLayout(TypeDef type)
+    {
+        if (type.ClassLayout is null) return null;
+
+        var layout = type.ClassLayout;
+        var kindName = type.IsExplicitLayout ? "Explicit" : type.IsSequentialLayout ? "Sequential" : "Auto";
+
+        return new StructLayoutMetadata
+        {
+            Kind = kindName,
+            Pack = layout.PackingSize,
+            Size = (int)layout.ClassSize
+        };
+    }
+
+    private List<FieldMetadata>? GetFields(TypeDef type)
+    {
+        if (type.IsEnum) return null;
+
+        var fields = new List<FieldMetadata>();
+        if (type.IsValueType || type.IsClass)
+        {
+            fields.AddRange(type.Fields
+                .Where(f => !f.IsStatic && !f.CustomAttributes.Any(a => a.TypeFullName == "System.Runtime.CompilerServices.CompilerGeneratedAttribute"))
+                .Select(f => new FieldMetadata
+                {
+                    Name = f.Name,
+                    Type = f.FieldType.FullName,
+                    Offset = (int?)f.FieldOffset
+                }));
+        }
+
+        return fields.Any() ? fields.OrderBy(f => f.Name).ToList() : null;
+    }
 }
 
 // Data model for serialization
@@ -220,6 +257,8 @@ public class TypeMetadata
     public List<MethodMetadata>? Methods { get; init; }
     public List<PropertyMetadata>? Properties { get; init; }
     public List<EnumValueMetadata>? EnumValues { get; init; }
+    public StructLayoutMetadata? StructLayout { get; init; }
+    public List<FieldMetadata>? Fields { get; init; }
 }
 
 public class MethodMetadata
@@ -245,4 +284,18 @@ public class EnumValueMetadata
 {
     public required string Name { get; init; }
     public string? Value { get; init; }
+}
+
+public class FieldMetadata
+{
+    public required string Name { get; init; }
+    public required string Type { get; init; }
+    public int? Offset { get; init; }
+}
+
+public class StructLayoutMetadata
+{
+    public required string Kind { get; init; }
+    public int? Pack { get; init; }
+    public int? Size { get; init; }
 }

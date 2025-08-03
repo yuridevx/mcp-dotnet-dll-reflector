@@ -1,48 +1,49 @@
-using System;
+using System.Runtime.InteropServices;
 
-namespace MyTestLibrary
+namespace MyTestLibrary;
+
+[StructLayout(LayoutKind.Explicit, Pack = 1, Size = 8)]
+public struct MyExplicitStruct
 {
-    public interface IMyInterface
+    [FieldOffset(0)]
+    public long AllBits;
+
+    [FieldOffset(0)]
+    public int Int1;
+
+    [FieldOffset(4)]
+    public int Int2;
+}
+
+public interface IMyInterface
+{
+    string GetMessage();
+}
+
+public enum MyEnum
+{
+    ValueA = 0,
+    ValueB = 10,
+    ValueC = 11
+}
+
+public struct MyStruct
+{
+    public int Number { get; set; }
+    public string Text { get; set; }
+
+    public string GetInfo()
     {
-        string GetName();
+        return $"Number: {Number}, Text: {Text}";
     }
+}
 
-    public enum MyEnum
+public class MyGenericClass<T>
+{
+    public T Value { get; set; }
+
+    public string GetValueType()
     {
-        ValueA,
-        ValueB = 10,
-        ValueC
-    }
-
-    public struct MyStruct
-    {
-        public int Number { get; set; }
-        public string Text { get; set; }
-
-        public MyStruct(int number, string text)
-        {
-            Number = number;
-            Text = text;
-        }
-
-        public string GetInfo()
-        {
-            return $"Number: {Number}, Text: {Text}";
-        }
-    }
-
-    public class MyGenericClass<T>
-    {
-        public T Value { get; set; }
-
-        public MyGenericClass(T value)
-        {
-            Value = value;
-        }
-
-        public string GetValueType()
-        {
-            return typeof(T).FullName;
-        }
+        return typeof(T).Name;
     }
 }

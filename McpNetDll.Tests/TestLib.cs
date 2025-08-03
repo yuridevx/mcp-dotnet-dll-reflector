@@ -10,7 +10,6 @@ namespace McpNetDll.Tests;
 public class ExtractorTests
 {
     private readonly string _testDllPath;
-    private readonly string _testXmlPath;
     private readonly Extractor _extractor;
 
     public ExtractorTests()
@@ -18,10 +17,9 @@ public class ExtractorTests
         // Adjust the path to be relative to the test project's output directory
         // Assuming MyTestLibrary.dll is in the same output directory as the test assembly
         var assemblyLocation = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-        _testDllPath = Path.Combine(assemblyLocation, "MyTestLibrary.dll");
-        // _testXmlPath = Path.ChangeExtension(_testDllPath, ".xml"); // XML documentation extraction removed
+       _testDllPath = Path.Combine(assemblyLocation ?? "", "MyTestLibrary.dll");
 
-        _extractor = new Extractor();
+       _extractor = new Extractor();
     }
 
     [Fact]
@@ -36,14 +34,14 @@ public class ExtractorTests
         Assert.Single(namespaces.EnumerateArray()); // Still only one namespace, 'MyTestLibrary'.
 
         var myTestLibraryNamespace = namespaces.EnumerateArray().First(ns => ns.GetProperty("Name").GetString() == "MyTestLibrary");
-        Assert.NotNull(myTestLibraryNamespace);
-        Assert.Equal(5, myTestLibraryNamespace.GetProperty("TypeCount").GetInt32()); // MyPublicClass, IMyInterface, MyEnum, MyStruct, MyGenericClass`1
+        Assert.Equal(6, myTestLibraryNamespace.GetProperty("TypeCount").GetInt32()); // MyPublicClass, IMyInterface, MyEnum, MyStruct, MyGenericClass`1, MyExplicitStruct
         Assert.True(myTestLibraryNamespace.TryGetProperty("Types", out var types));
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyPublicClass");
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "IMyInterface");
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyEnum");
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyStruct");
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyGenericClass`1");
+        Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyExplicitStruct");
     }
 
     [Fact]
@@ -62,7 +60,7 @@ public class ExtractorTests
 
         var myTestLibraryNamespace = namespaces.EnumerateArray().First();
         Assert.True(myTestLibraryNamespace.TryGetProperty("Types", out var types));
-        Assert.Equal(5, types.EnumerateArray().Count());
+        Assert.Equal(6, types.EnumerateArray().Count());
 
         var myPublicClass = types.EnumerateArray().First(t => t.GetProperty("Name").GetString() == "MyPublicClass");
         Assert.Equal("MyTestLibrary", myPublicClass.GetProperty("Namespace").GetString());
@@ -132,11 +130,10 @@ public class ExtractorTests
         Assert.Single(types.EnumerateArray());
 
         var myPublicClass = types.EnumerateArray().First(t => t.GetProperty("Name").GetString() == "MyPublicClass");
-        Assert.NotNull(myPublicClass);
         Assert.True(myPublicClass.TryGetProperty("Methods", out var methods)); // Should contain detailed methods
         Assert.True(myPublicClass.TryGetProperty("Properties", out var properties)); // Should contain detailed properties
-        Assert.True(methods.EnumerateArray().Any(m => m.GetProperty("Name").GetString() == "GetInstanceMessage"));
-        Assert.True(properties.EnumerateArray().Any(p => p.GetProperty("Name").GetString() == "InstanceProperty"));
+        Assert.Contains(methods.EnumerateArray(), m => m.GetProperty("Name").GetString() == "GetInstanceMessage");
+        Assert.Contains(properties.EnumerateArray(), p => p.GetProperty("Name").GetString() == "InstanceProperty");
     }
 
     [Fact]
@@ -154,11 +151,10 @@ public class ExtractorTests
         Assert.Single(types.EnumerateArray());
 
         var myPublicClass = types.EnumerateArray().First(t => t.GetProperty("Name").GetString() == "MyPublicClass");
-        Assert.NotNull(myPublicClass);
         Assert.True(myPublicClass.TryGetProperty("Methods", out var methods)); // Should contain detailed methods
         Assert.True(myPublicClass.TryGetProperty("Properties", out var properties)); // Should contain detailed properties
-        Assert.True(methods.EnumerateArray().Any(m => m.GetProperty("Name").GetString() == "GetInstanceMessage"));
-        Assert.True(properties.EnumerateArray().Any(p => p.GetProperty("Name").GetString() == "InstanceProperty"));
+        Assert.Contains(methods.EnumerateArray(), m => m.GetProperty("Name").GetString() == "GetInstanceMessage");
+        Assert.Contains(properties.EnumerateArray(), p => p.GetProperty("Name").GetString() == "InstanceProperty");
     }
 
     [Fact]
@@ -249,7 +245,6 @@ public class ExtractorTests
         // Assert
         Assert.True(result.TryGetProperty("Namespaces", out var namespaces));
         var myTestLibraryNamespace = namespaces.EnumerateArray().First(ns => ns.GetProperty("Name").GetString() == "MyTestLibrary");
-        Assert.NotNull(myTestLibraryNamespace);
         Assert.True(myTestLibraryNamespace.TryGetProperty("Types", out var types));
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyEnum");
         Assert.Contains(types.EnumerateArray(), t => t.GetProperty("Name").GetString() == "MyStruct");
@@ -289,7 +284,6 @@ public class ExtractorTests
         Assert.Equal(3, types.EnumerateArray().Count());
 
         var myEnum = types.EnumerateArray().FirstOrDefault(t => t.GetProperty("Name").GetString() == "MyEnum");
-        // Assert.NotNull is not needed for JsonElement types: https://xunit.net/xunit.analyzers/rules/xUnit2002
         Assert.Equal("Enum", myEnum.GetProperty("TypeKind").GetString());
         Assert.True(myEnum.TryGetProperty("EnumValues", out var enumValues));
         Assert.Contains(enumValues.EnumerateArray(), ev => ev.GetProperty("Name").GetString() == "ValueA" && ev.GetProperty("Value").GetString() == "0");
@@ -297,7 +291,6 @@ public class ExtractorTests
         Assert.Contains(enumValues.EnumerateArray(), ev => ev.GetProperty("Name").GetString() == "ValueC" && ev.GetProperty("Value").GetString() == "11");
 
         var myStruct = types.EnumerateArray().FirstOrDefault(t => t.GetProperty("Name").GetString() == "MyStruct");
-        // Assert.NotNull is not needed for JsonElement types: https://xunit.net/xunit.analyzers/rules/xUnit2002
         Assert.Equal("Struct", myStruct.GetProperty("TypeKind").GetString());
         Assert.True(myStruct.TryGetProperty("Properties", out var structProperties));
         Assert.Contains(structProperties.EnumerateArray(), p => p.GetProperty("Name").GetString() == "Number");
@@ -306,7 +299,6 @@ public class ExtractorTests
         Assert.Contains(structMethods.EnumerateArray(), m => m.GetProperty("Name").GetString() == "GetInfo");
 
         var myGenericClass = types.EnumerateArray().FirstOrDefault(t => t.GetProperty("Name").GetString() == "MyGenericClass`1");
-        // Assert.NotNull is not needed for JsonElement types: https://xunit.net/xunit.analyzers/rules/xUnit2002
         Assert.Equal("Class", myGenericClass.GetProperty("TypeKind").GetString());
         Assert.True(myGenericClass.TryGetProperty("Properties", out var genericProperties));
         Assert.Contains(genericProperties.EnumerateArray(), p => p.GetProperty("Name").GetString() == "Value");
@@ -342,5 +334,45 @@ public class ExtractorTests
         // Assert
         Assert.True(result.TryGetProperty("error", out var error));
         Assert.Contains("Type(s) not found: NonExistentType", error.GetString());
+    }
+    [Fact]
+    public void GetTypeDetails_ShouldReturnStructLayoutAndFieldOffsets()
+    {
+        // Arrange
+        string[] typeNames = { "MyTestLibrary.MyExplicitStruct" };
+
+        // Act
+        var resultJson = _extractor.GetTypeDetails(_testDllPath, typeNames);
+        var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
+
+        // Assert
+        Assert.True(result.TryGetProperty("Types", out var types));
+        Assert.Single(types.EnumerateArray());
+
+        var myStruct = types.EnumerateArray().First();
+        Assert.Equal("MyExplicitStruct", myStruct.GetProperty("Name").GetString());
+        Assert.Equal("Struct", myStruct.GetProperty("TypeKind").GetString());
+
+        // Check StructLayout
+        Assert.True(myStruct.TryGetProperty("StructLayout", out var layout));
+        Assert.Equal("Explicit", layout.GetProperty("Kind").GetString());
+        Assert.Equal(1, layout.GetProperty("Pack").GetInt32());
+        Assert.Equal(8, layout.GetProperty("Size").GetInt32());
+
+        // Check Fields and FieldOffsets
+        Assert.True(myStruct.TryGetProperty("Fields", out var fields));
+        Assert.Equal(3, fields.EnumerateArray().Count());
+
+        var allBitsField = fields.EnumerateArray().First(f => f.GetProperty("Name").GetString() == "AllBits");
+        Assert.Equal("System.Int64", allBitsField.GetProperty("Type").GetString());
+        Assert.Equal(0, allBitsField.GetProperty("Offset").GetInt32());
+
+        var int1Field = fields.EnumerateArray().First(f => f.GetProperty("Name").GetString() == "Int1");
+        Assert.Equal("System.Int32", int1Field.GetProperty("Type").GetString());
+        Assert.Equal(0, int1Field.GetProperty("Offset").GetInt32());
+
+        var int2Field = fields.EnumerateArray().First(f => f.GetProperty("Name").GetString() == "Int2");
+        Assert.Equal("System.Int32", int2Field.GetProperty("Type").GetString());
+        Assert.Equal(4, int2Field.GetProperty("Offset").GetInt32());
     }
 }
