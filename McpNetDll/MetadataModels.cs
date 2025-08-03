@@ -21,6 +21,7 @@ public class TypeMetadata
     public required string TypeKind { get; init; }
     public int? MethodCount { get; init; }
     public int? PropertyCount { get; init; }
+    public int? FieldCount { get; init; }
     public List<MethodMetadata>? Methods { get; init; }
     public List<PropertyMetadata>? Properties { get; init; }
     public List<EnumValueMetadata>? EnumValues { get; init; }

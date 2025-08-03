@@ -136,6 +136,7 @@ public class Extractor
             TypeKind = GetTypeKind(type),
             MethodCount = type.Methods.Count(m => m.IsPublic && !m.IsSpecialName),
             PropertyCount = type.Properties.Count(p => p.GetMethod?.IsPublic ?? p.SetMethod?.IsPublic ?? false),
+            FieldCount = GetFields(type)?.Count,
             EnumValues = type.IsEnum ? GetEnumValues(type) : null,
             Methods = withMemberDetails
                 ? type.Methods
