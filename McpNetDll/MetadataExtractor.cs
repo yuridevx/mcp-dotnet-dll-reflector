@@ -9,244 +9,184 @@ namespace McpNetDll;
 
 public class Extractor
 {
-    // New public API
+    private readonly List<TypeMetadata> _types = new();
+    private readonly Dictionary<string, TypeMetadata> _typeMap = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<TypeMetadata>> _simpleNameMap = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _loadErrors = new();
+
+    public Extractor(string[] assemblyPaths)
+    {
+        foreach (var path in assemblyPaths)
+        {
+            try
+            {
+                var module = ModuleDefMD.Load(ConvertWslPath(path));
+                foreach (var type in module.Types.Where(t => t.IsPublic))
+                {
+                    var metadata = CreateTypeMetadata(type);
+                    _types.Add(metadata);
+                    
+                    var fullName = $"{metadata.Namespace}.{metadata.Name}";
+                    _typeMap[fullName] = metadata;
+                    
+                    if (!_simpleNameMap.ContainsKey(metadata.Name))
+                        _simpleNameMap[metadata.Name] = new List<TypeMetadata>();
+                    _simpleNameMap[metadata.Name].Add(metadata);
+                }
+            }
+            catch (Exception ex)
+            {
+                _loadErrors.Add($"Failed to load {path}: {ex.Message}");
+            }
+        }
+    }
+
+    public Extractor() : this(Array.Empty<string>()) { }
+
+    public string ListNamespaces(string[]? namespaces = null)
+    {
+        if (_loadErrors.Any() && !_types.Any())
+            return JsonSerializer.Serialize(new { error = $"Failed to load all assemblies: {string.Join(", ", _loadErrors)}" }, JsonOptions);
+
+        var types = _types.AsEnumerable();
+        if (namespaces?.Length > 0)
+        {
+            var availableNs = _types.Select(t => t.Namespace).Distinct().ToList();
+            var missing = namespaces.Where(ns => !availableNs.Contains(ns, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (missing.Any())
+                return JsonSerializer.Serialize(new { error = $"Namespace(s) not found: {string.Join(", ", missing)}", availableNamespaces = availableNs.OrderBy(x => x) }, JsonOptions);
+            
+            types = _types.Where(t => namespaces.Contains(t.Namespace, StringComparer.OrdinalIgnoreCase));
+        }
+
+        var result = types.GroupBy(t => t.Namespace)
+            .Select(g => new {
+                Name = g.Key,
+                TypeCount = g.Count(),
+                Types = g.Select(t => new {
+                    t.Name, t.Namespace, t.TypeKind, t.MethodCount, t.PropertyCount, t.FieldCount, t.EnumValues
+                }).OrderBy(t => t.Name)
+            })
+            .OrderBy(ns => ns.Name);
+
+        return JsonSerializer.Serialize(new { Namespaces = result }, JsonOptions);
+    }
+
+    public string GetTypeDetails(string[] typeNames)
+    {
+        if (typeNames == null || typeNames.Length == 0)
+            return JsonSerializer.Serialize(new { error = "TypeNames array cannot be empty." }, JsonOptions);
+
+        if (_loadErrors.Any() && !_types.Any())
+            return JsonSerializer.Serialize(new { error = $"Failed to load all assemblies: {string.Join(", ", _loadErrors)}" }, JsonOptions);
+
+        var found = new List<TypeMetadata>();
+        var missing = new List<string>();
+
+        foreach (var name in typeNames)
+        {
+            if (_typeMap.TryGetValue(name, out var type))
+                found.Add(type);
+            else if (_simpleNameMap.TryGetValue(name, out var types) && types.Count == 1)
+                found.Add(types[0]);
+            else
+                missing.Add(name);
+        }
+
+        if (missing.Any())
+            return JsonSerializer.Serialize(new {
+                error = $"Type(s) not found or ambiguous: {string.Join(", ", missing)}",
+                availableTypes = _typeMap.Keys.OrderBy(x => x)
+            }, JsonOptions);
+
+        return JsonSerializer.Serialize(new { Types = found.OrderBy(t => t.Name).ThenBy(t => t.Namespace) }, JsonOptions);
+    }
+
+    // Backward compatibility methods for tests
     public string ListNamespaces(string assemblyPath, string[]? namespaces = null)
     {
-        var result = LoadAndProcessAssembly(assemblyPath, allTypes =>
-        {
-            IEnumerable<TypeDef> typesToProcess = allTypes;
-            if (namespaces != null && namespaces.Length > 0)
-            {
-                var availableNamespaces = allTypes.Select(t => t.Namespace.String).Distinct().ToList();
-                var notFoundNamespaces = namespaces.Where(ns => !availableNamespaces.Contains(ns)).ToList();
-                if (notFoundNamespaces.Any())
-                {
-                    return (object)new {
-                        error = $"Namespace(s) not found: {string.Join(", ", notFoundNamespaces)}",
-                        availableNamespaces = availableNamespaces.OrderBy(ns => ns).ToList()
-                    };
-                }
-                typesToProcess = allTypes.Where(t => namespaces.Contains(t.Namespace.String));
-            }
-
-            var namespaceInfo = typesToProcess
-                .GroupBy(t => t.Namespace.String)
-                .Select(g => new NamespaceMetadata
-                {
-                    Name = g.Key,
-                    TypeCount = g.Count(),
-                    Types = g.Select(type => ExtractTypeMetadata(type, withMemberDetails: false))
-                               .OrderBy(t => t.Name).ToList()
-                })
-                .OrderBy(ns => ns.Name)
-                .ToList();
-
-            return new { Namespaces = namespaceInfo };
-        });
-
-        return SerializeResult(result);
+        if (string.IsNullOrEmpty(assemblyPath))
+            return JsonSerializer.Serialize(new { error = "Assembly path cannot be null or empty." }, JsonOptions);
+        if (!File.Exists(assemblyPath))
+            return JsonSerializer.Serialize(new { error = "Assembly file not found." }, JsonOptions);
+        
+        return new Extractor(new[] { assemblyPath }).ListNamespaces(namespaces);
     }
 
     public string GetTypeDetails(string assemblyPath, string[] typeNames)
     {
-        if (typeNames == null || typeNames.Length == 0)
-        {
-            return SerializeResult(new { error = "TypeNames array cannot be empty." });
-        }
-
-        var result = LoadAndProcessAssembly(assemblyPath, allTypes =>
-        {
-            var typeMap = allTypes.GroupBy(t => $"{t.Namespace.String}.{t.Name.String}".ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First());
-            var simpleNameMap = allTypes.GroupBy(t => t.Name.String.ToLowerInvariant()).ToDictionary(g => g.Key, g => g.ToList());
-
-            var typesToExtract = new HashSet<TypeDef>();
-            var notFoundTypes = new List<string>();
-
-            foreach (var name in typeNames)
-            {
-                var nameLower = name.ToLowerInvariant();
-                if (typeMap.TryGetValue(nameLower, out var foundType))
-                {
-                    typesToExtract.Add(foundType);
-                }
-                else if (simpleNameMap.TryGetValue(nameLower, out var foundTypes) && foundTypes.Count == 1)
-                {
-                    typesToExtract.Add(foundTypes.First());
-                }
-                else
-                {
-                    notFoundTypes.Add(name);
-                }
-            }
-
-            if (notFoundTypes.Any())
-            {
-                return (object)new {
-                    error = $"Type(s) not found or ambiguous: {string.Join(", ", notFoundTypes)}",
-                    availableTypes = allTypes.Select(t => $"{t.Namespace.String}.{t.Name.String}").OrderBy(n => n).ToList()
-                };
-            }
-
-            var filteredTypes = typesToExtract
-                .Select(type => ExtractTypeMetadata(type, withMemberDetails: true))
-                .OrderBy(t => t.Name).ThenBy(t => t.Namespace)
-                .ToList();
-
-            return new { Types = filteredTypes };
-        });
-
-        return SerializeResult(result);
-    }
-    
-    // Private helpers
-    private object LoadAndProcessAssembly(string assemblyPath, Func<List<TypeDef>, object> processor)
-    {
         if (string.IsNullOrEmpty(assemblyPath))
-        {
-            return new { error = "Assembly path cannot be null or empty." };
-        }
-        
-        assemblyPath = ConvertWslPathToWindowsPath(assemblyPath);
-
+            return JsonSerializer.Serialize(new { error = "Assembly path cannot be null or empty." }, JsonOptions);
         if (!File.Exists(assemblyPath))
-        {
-            return new { error = "Assembly file not found." };
-        }
-
-        try
-        {
-            var module = ModuleDefMD.Load(assemblyPath);
-            var publicTypes = module.Types
-                .Where(t => t.IsPublic)
-                .ToList();
-            return processor(publicTypes);
-        }
-        catch (Exception ex)
-        {
-            return new { error = $"Failed to load assembly: {ex.Message}" };
-        }
-    }
-
-    private TypeMetadata ExtractTypeMetadata(TypeDef type, bool withMemberDetails)
-    {
-        return new TypeMetadata
-        {
-            Name = type.Name.String,
-            Namespace = type.Namespace.String,
-            TypeKind = GetTypeKind(type),
-            MethodCount = type.Methods.Count(m => m.IsPublic && !m.IsSpecialName),
-            PropertyCount = type.Properties.Count(p => p.GetMethod?.IsPublic ?? p.SetMethod?.IsPublic ?? false),
-            FieldCount = GetFields(type)?.Count,
-            EnumValues = type.IsEnum ? GetEnumValues(type) : null,
-            Methods = withMemberDetails
-                ? type.Methods
-                    .Where(m => m.IsPublic && !m.IsSpecialName)
-                    .Select(m => new MethodMetadata
-                    {
-                        Name = m.Name,
-                        ReturnType = m.ReturnType.FullName,
-                        Parameters = (m.HasThis ? m.Parameters.Skip(1) : m.Parameters)
-                            .Select(p => new ParameterMetadata
-                            {
-                                Name = p.Name,
-                                Type = p.Type.FullName
-                            }).ToList()
-                    })
-                    .OrderBy(m => m.Name).ToList()
-                : null,
-            Properties = withMemberDetails
-                ? type.Properties
-                    .Where(p => p.GetMethod?.IsPublic ?? p.SetMethod?.IsPublic ?? false)
-                    .Select(p => new PropertyMetadata
-                    {
-                        Name = p.Name,
-                        Type = p.PropertySig.GetRetType().FullName
-                    })
-                    .OrderBy(p => p.Name).ToList()
-                : null,
-            StructLayout = withMemberDetails && !type.IsEnum ? GetStructLayout(type) : null,
-            Fields = withMemberDetails && !type.IsEnum ? GetFields(type) : null
-        };
+            return JsonSerializer.Serialize(new { error = "Assembly file not found." }, JsonOptions);
+        
+        return new Extractor(new[] { assemblyPath }).GetTypeDetails(typeNames);
     }
     
-    private string SerializeResult(object result)
-    {
-        return JsonSerializer.Serialize(result, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        });
-    }
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
-    private string ConvertWslPathToWindowsPath(string path)
+    private TypeMetadata CreateTypeMetadata(TypeDef type) => new()
     {
-        if (OperatingSystem.IsWindows() && path.StartsWith("/mnt/") && path.Length > 6)
-        {
-            char driveLetter = path[5];
-            string restOfPath = path.Substring(6);
-            return $"{char.ToUpper(driveLetter)}:{restOfPath.Replace('/', '\\')}";
-        }
-        return path;
-    }
-
-    private string GetTypeKind(TypeDef type)
-    {
-        if (type.IsEnum) return "enum";
-        if (type.IsPrimitive) return "primitive";
-        if (type.BaseType is { FullName: "System.MulticastDelegate" }) return "delegate";
-        if (type.IsValueType) return "struct";
-        if (type.IsInterface) return "interface";
-        if (type.IsAbstract && type.IsSealed) return "static class";
-        if (type.IsAbstract) return "abstract class";
-        if (type.IsSealed) return "sealed class";
-        if (type.IsClass) return "class";
-        return "other";
-    }
-
-    private List<EnumValueMetadata> GetEnumValues(TypeDef type)
-    {
-        return type.Fields
-            .Where(f => f.IsPublic && f.IsStatic && f.IsLiteral)
-            .Select(f => new EnumValueMetadata
+        Name = type.Name.String,
+        Namespace = type.Namespace.String,
+        TypeKind = GetTypeKind(type),
+        MethodCount = type.Methods.Count(m => m.IsPublic && !m.IsSpecialName),
+        PropertyCount = type.Properties.Count(p => p.GetMethod?.IsPublic ?? p.SetMethod?.IsPublic ?? false),
+        FieldCount = GetFields(type)?.Count,
+        EnumValues = type.IsEnum ? GetEnumValues(type) : null,
+        Methods = type.Methods.Where(m => m.IsPublic && !m.IsSpecialName)
+            .Select(m => new MethodMetadata
             {
-                Name = f.Name.String,
-                Value = f.Constant.Value?.ToString()
-            })
-            .ToList();
-    }
+                Name = m.Name,
+                ReturnType = m.ReturnType.FullName,
+                Parameters = (m.HasThis ? m.Parameters.Skip(1) : m.Parameters)
+                    .Select(p => new ParameterMetadata { Name = p.Name, Type = p.Type.FullName }).ToList()
+            }).OrderBy(m => m.Name).ToList(),
+        Properties = type.Properties.Where(p => p.GetMethod?.IsPublic ?? p.SetMethod?.IsPublic ?? false)
+            .Select(p => new PropertyMetadata { Name = p.Name, Type = p.PropertySig.GetRetType().FullName })
+            .OrderBy(p => p.Name).ToList(),
+        StructLayout = !type.IsEnum ? GetStructLayout(type) : null,
+        Fields = !type.IsEnum ? GetFields(type) : null
+    };
 
-    private StructLayoutMetadata? GetStructLayout(TypeDef type)
+    private static string ConvertWslPath(string path) => 
+        OperatingSystem.IsWindows() && path.StartsWith("/mnt/") && path.Length > 6 
+            ? $"{char.ToUpper(path[5])}:{path[6..].Replace('/', '\\')}" 
+            : path;
+
+    private static string GetTypeKind(TypeDef type) => type switch
     {
-        if (type.ClassLayout is null) return null;
+        _ when type.IsEnum => "enum",
+        _ when type.IsPrimitive => "primitive", 
+        _ when type.BaseType?.FullName == "System.MulticastDelegate" => "delegate",
+        _ when type.IsValueType => "struct",
+        _ when type.IsInterface => "interface",
+        _ when type.IsAbstract && type.IsSealed => "static class",
+        _ when type.IsAbstract => "abstract class",
+        _ when type.IsSealed => "sealed class",
+        _ when type.IsClass => "class",
+        _ => "other"
+    };
 
-        var layout = type.ClassLayout;
-        var kindName = type.IsExplicitLayout ? "Explicit" : type.IsSequentialLayout ? "Sequential" : "Auto";
+    private static List<EnumValueMetadata>? GetEnumValues(TypeDef type) =>
+        type.IsEnum ? type.Fields.Where(f => f.IsPublic && f.IsStatic && f.IsLiteral)
+            .Select(f => new EnumValueMetadata { Name = f.Name.String, Value = f.Constant.Value?.ToString() }).ToList() 
+            : null;
 
-        return new StructLayoutMetadata
+    private static StructLayoutMetadata? GetStructLayout(TypeDef type) =>
+        type.ClassLayout is null ? null : new StructLayoutMetadata
         {
-            Kind = kindName,
-            Pack = layout.PackingSize,
-            Size = (int)layout.ClassSize
+            Kind = type.IsExplicitLayout ? "Explicit" : type.IsSequentialLayout ? "Sequential" : "Auto",
+            Pack = type.ClassLayout.PackingSize,
+            Size = (int)type.ClassLayout.ClassSize
         };
-    }
 
-    private List<FieldMetadata>? GetFields(TypeDef type)
+    private static List<FieldMetadata>? GetFields(TypeDef type)
     {
         if (type.IsEnum) return null;
-
-        var fields = new List<FieldMetadata>();
-        if (type.IsValueType || type.IsClass)
-        {
-            fields.AddRange(type.Fields
-                .Where(f => !f.IsStatic && !f.CustomAttributes.Any(a => a.TypeFullName == "System.Runtime.CompilerServices.CompilerGeneratedAttribute"))
-                .Select(f => new FieldMetadata
-                {
-                    Name = f.Name,
-                    Type = f.FieldType.FullName,
-                    Offset = (int?)f.FieldOffset
-                }));
-        }
-
-        return fields.Any() ? fields.OrderBy(f => f.Name).ToList() : null;
+        var fields = type.Fields.Where(f => !f.IsStatic && !f.CustomAttributes.Any(a => a.TypeFullName == "System.Runtime.CompilerServices.CompilerGeneratedAttribute"))
+            .Select(f => new FieldMetadata { Name = f.Name, Type = f.FieldType.FullName, Offset = (int?)f.FieldOffset })
+            .OrderBy(f => f.Name).ToList();
+        return fields.Any() ? fields : null;
     }
 }
