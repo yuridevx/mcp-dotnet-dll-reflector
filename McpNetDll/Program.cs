@@ -4,21 +4,6 @@ using Microsoft.Extensions.Logging;
 
 namespace McpNetDll;
 
-public class DllPathRegistry
-{
-    public string[] AllowedPaths { get; }
-
-    public DllPathRegistry(string[] allowedPaths)
-    {
-        AllowedPaths = allowedPaths;
-    }
-
-    public bool IsPathAllowed(string path)
-    {
-        return AllowedPaths.Contains(path, StringComparer.OrdinalIgnoreCase);
-    }
-}
-
 public class Program
 {
     public static async Task Main(string[] args)
@@ -49,7 +34,6 @@ public class Program
             : "No namespaces loaded";
 
         builder.Services.AddSingleton(extractor);
-        builder.Services.AddSingleton(new DllPathRegistry(dllPaths));
         builder.Services
             .AddMcpServer(server => { 
                 server.ServerInfo = new() { 

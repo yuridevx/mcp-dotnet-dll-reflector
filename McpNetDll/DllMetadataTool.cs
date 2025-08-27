@@ -11,11 +11,64 @@ public static class DllMetadataTool
         var namespaces = extractor.GetAvailableNamespaces();
         if (!namespaces.Any()) return "";
         
-        var summary = namespaces.Count <= 8 
-            ? string.Join(", ", namespaces)
-            : $"{string.Join(", ", namespaces.Take(8))}... (+{namespaces.Count - 8} more)";
+        if (namespaces.Count <= 8)
+        {
+            return $" Currently loaded namespaces ({namespaces.Count}):\n{BuildNamespaceTree(namespaces)}";
+        }
+        else
+        {
+            var topNamespaces = namespaces.Take(8).ToList();
+            var tree = BuildNamespaceTree(topNamespaces);
+            return $" Currently loaded namespaces ({namespaces.Count}, showing first 8):\n{tree}\n... (+{namespaces.Count - 8} more)";
+        }
+    }
+
+    private static string BuildNamespaceTree(IEnumerable<string> namespaces)
+    {
+        var tree = new Dictionary<string, object>();
         
-        return $" Currently loaded namespaces ({namespaces.Count}): {summary}";
+        foreach (var ns in namespaces.OrderBy(x => x))
+        {
+            var parts = ns.Split('.');
+            var current = tree;
+            
+            for (int i = 0; i < parts.Length; i++)
+            {
+                var part = parts[i];
+                if (!current.ContainsKey(part))
+                {
+                    current[part] = new Dictionary<string, object>();
+                }
+                current = (Dictionary<string, object>)current[part];
+            }
+        }
+        
+        return RenderTree(tree, "", true);
+    }
+    
+    private static string RenderTree(Dictionary<string, object> node, string prefix, bool isRoot)
+    {
+        var result = new System.Text.StringBuilder();
+        var items = node.Keys.OrderBy(x => x).ToList();
+        
+        for (int i = 0; i < items.Count; i++)
+        {
+            var key = items[i];
+            var isLast = i == items.Count - 1;
+            var currentPrefix = isRoot ? "" : prefix;
+            var connector = isRoot ? "" : (isLast ? "└── " : "├── ");
+            
+            result.AppendLine($"{currentPrefix}{connector}{key}");
+            
+            var childDict = (Dictionary<string, object>)node[key];
+            if (childDict.Any())
+            {
+                var nextPrefix = isRoot ? "" : prefix + (isLast ? "    " : "│   ");
+                result.Append(RenderTree(childDict, nextPrefix, false));
+            }
+        }
+        
+        return result.ToString();
     }
 
     [McpServerTool,
