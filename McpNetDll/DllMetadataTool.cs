@@ -76,9 +76,13 @@ public static class DllMetadataTool
     public static string ListNamespaces(
         Extractor extractor,
         [Description("Optional: An array of specific namespace names to inspect. If omitted, all loaded namespaces will be listed.")]
-        string[]? namespaces = null)
+        string[]? namespaces = null,
+        [Description("Optional: Maximum number of namespaces to return (default: 50)")]
+        int? limit = null,
+        [Description("Optional: Number of namespaces to skip (default: 0)")]
+        int? offset = null)
     {
-        var result = extractor.ListNamespaces(namespaces);
+        var result = extractor.ListNamespaces(namespaces, limit ?? 50, offset ?? 0);
         
         // Add dynamic context to help Claude understand what's available
         if (namespaces == null || namespaces.Length == 0)
@@ -86,13 +90,15 @@ public static class DllMetadataTool
             var availableNamespaces = extractor.GetAvailableNamespaces();
             var contextualResult = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(result);
             
-            if (contextualResult.TryGetProperty("Namespaces", out var namespacesElement))
+            if (contextualResult.TryGetProperty("Namespaces", out var namespacesElement) && 
+                contextualResult.TryGetProperty("Pagination", out var paginationElement))
             {
                 var enhancedResult = new
                 {
                     Summary = $"Found {availableNamespaces.Count} namespaces in loaded assemblies",
                     LoadedAssemblyInfo = GetNamespaceInfo(extractor).Trim(),
-                    Namespaces = namespacesElement
+                    Namespaces = namespacesElement,
+                    Pagination = paginationElement
                 };
                 return System.Text.Json.JsonSerializer.Serialize(enhancedResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
             }
@@ -119,6 +125,39 @@ public static class DllMetadataTool
                 Summary = $"Type details for {typeNames.Length} requested type(s)",
                 LoadedAssemblyInfo = GetNamespaceInfo(extractor).Trim(),
                 Types = typesElement
+            };
+            return System.Text.Json.JsonSerializer.Serialize(enhancedResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        
+        return result;
+    }
+
+    [McpServerTool,
+     Description("Searches across all elements (types, methods, properties, fields, enum values) matching a regular expression pattern")]
+    public static string SearchElements(
+        Extractor extractor,
+        [Description("Regular expression pattern to search for (e.g., '.*Service.*', 'Get.*', '^I[A-Z].*')")]
+        string pattern,
+        [Description("Optional: Element types to search in. Options: 'all' (default), 'types', 'methods', 'properties', 'fields', 'enums'")]
+        string? searchScope = null,
+        [Description("Optional: Maximum number of results to return (default: 100)")]
+        int? limit = null,
+        [Description("Optional: Number of results to skip (default: 0)")]
+        int? offset = null)
+    {
+        var result = extractor.SearchElements(pattern, searchScope ?? "all", limit ?? 100, offset ?? 0);
+        
+        // Add contextual information
+        var contextualResult = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(result);
+        if (contextualResult.TryGetProperty("Results", out var resultsElement) && 
+            contextualResult.TryGetProperty("Pagination", out var paginationElement))
+        {
+            var enhancedResult = new
+            {
+                Summary = $"Search results for pattern '{pattern}'",
+                LoadedAssemblyInfo = GetNamespaceInfo(extractor).Trim(),
+                Results = resultsElement,
+                Pagination = paginationElement
             };
             return System.Text.Json.JsonSerializer.Serialize(enhancedResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         }

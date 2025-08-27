@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace McpNetDll;
 
@@ -46,7 +47,7 @@ public class Extractor
     public List<string> GetAvailableNamespaces() => 
         _types.Select(t => t.Namespace).Distinct().OrderBy(ns => ns).ToList();
 
-    public string ListNamespaces(string[]? namespaces = null)
+    public string ListNamespaces(string[]? namespaces = null, int limit = 50, int offset = 0)
     {
         if (_loadErrors.Any() && !_types.Any())
             return JsonSerializer.Serialize(new { error = $"Failed to load all assemblies: {string.Join(", ", _loadErrors)}" }, JsonOptions);
@@ -62,7 +63,7 @@ public class Extractor
             types = _types.Where(t => namespaces.Contains(t.Namespace, StringComparer.OrdinalIgnoreCase));
         }
 
-        var result = types.GroupBy(t => t.Namespace)
+        var allNamespaces = types.GroupBy(t => t.Namespace)
             .Select(g => new {
                 Name = g.Key,
                 TypeCount = g.Count(),
@@ -70,9 +71,27 @@ public class Extractor
                     t.Name, t.Namespace, t.TypeKind, t.MethodCount, t.PropertyCount, t.FieldCount, t.EnumValues
                 }).OrderBy(t => t.Name)
             })
-            .OrderBy(ns => ns.Name);
+            .OrderBy(ns => ns.Name)
+            .ToList();
 
-        return JsonSerializer.Serialize(new { Namespaces = result }, JsonOptions);
+        var total = allNamespaces.Count;
+        var paginatedResult = allNamespaces.Skip(offset).Take(limit).ToList();
+
+        return JsonSerializer.Serialize(new { 
+            Namespaces = paginatedResult,
+            Pagination = new {
+                Total = total,
+                Limit = limit,
+                Offset = offset,
+                HasMore = (offset + limit) < total
+            }
+        }, JsonOptions);
+    }
+    
+    // Overload for backward compatibility (without pagination)
+    public string ListNamespaces(string[]? namespaces = null)
+    {
+        return ListNamespaces(namespaces, int.MaxValue, 0);
     }
 
     public string GetTypeDetails(string[] typeNames)
@@ -113,7 +132,7 @@ public class Extractor
         if (!File.Exists(assemblyPath))
             return JsonSerializer.Serialize(new { error = "Assembly file not found." }, JsonOptions);
         
-        return new Extractor(new[] { assemblyPath }).ListNamespaces(namespaces);
+        return new Extractor(new[] { assemblyPath }).ListNamespaces(namespaces, int.MaxValue, 0);
     }
 
     public string GetTypeDetails(string assemblyPath, string[] typeNames)
@@ -126,6 +145,123 @@ public class Extractor
         return new Extractor(new[] { assemblyPath }).GetTypeDetails(typeNames);
     }
     
+    public string SearchElements(string pattern, string searchScope, int limit, int offset)
+    {
+        try
+        {
+            var regex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            var results = new List<dynamic>();
+
+            foreach (var type in _types.OrderBy(t => t.Namespace).ThenBy(t => t.Name))
+            {
+                // Search in type names
+                if ((searchScope == "all" || searchScope == "types") && regex.IsMatch(type.Name))
+                {
+                    results.Add(new
+                    {
+                        ElementType = "Type",
+                        Name = type.Name,
+                        Namespace = type.Namespace,
+                        TypeKind = type.TypeKind,
+                        FullName = $"{type.Namespace}.{type.Name}"
+                    });
+                }
+
+                // Search in methods
+                if ((searchScope == "all" || searchScope == "methods") && type.Methods != null)
+                {
+                    foreach (var method in type.Methods)
+                    {
+                        if (regex.IsMatch(method.Name))
+                        {
+                            results.Add(new
+                            {
+                                ElementType = "Method",
+                                Name = method.Name,
+                                ParentType = $"{type.Namespace}.{type.Name}",
+                                ReturnType = method.ReturnType,
+                                Parameters = method.Parameters?.Select(p => p.Type)
+                            });
+                        }
+                    }
+                }
+
+                // Search in properties
+                if ((searchScope == "all" || searchScope == "properties") && type.Properties != null)
+                {
+                    foreach (var property in type.Properties)
+                    {
+                        if (regex.IsMatch(property.Name))
+                        {
+                            results.Add(new
+                            {
+                                ElementType = "Property",
+                                Name = property.Name,
+                                ParentType = $"{type.Namespace}.{type.Name}",
+                                PropertyType = property.Type
+                            });
+                        }
+                    }
+                }
+
+                // Search in fields
+                if ((searchScope == "all" || searchScope == "fields") && type.Fields != null)
+                {
+                    foreach (var field in type.Fields)
+                    {
+                        if (regex.IsMatch(field.Name))
+                        {
+                            results.Add(new
+                            {
+                                ElementType = "Field",
+                                Name = field.Name,
+                                ParentType = $"{type.Namespace}.{type.Name}",
+                                FieldType = field.Type
+                            });
+                        }
+                    }
+                }
+
+                // Search in enum values
+                if ((searchScope == "all" || searchScope == "enums") && type.EnumValues != null)
+                {
+                    foreach (var enumValue in type.EnumValues)
+                    {
+                        if (regex.IsMatch(enumValue.Name))
+                        {
+                            results.Add(new
+                            {
+                                ElementType = "EnumValue",
+                                Name = enumValue.Name,
+                                ParentType = $"{type.Namespace}.{type.Name}",
+                                Value = enumValue.Value
+                            });
+                        }
+                    }
+                }
+            }
+
+            var total = results.Count;
+            var paginatedResults = results.Skip(offset).Take(limit).ToList();
+
+            return JsonSerializer.Serialize(new
+            {
+                Results = paginatedResults,
+                Pagination = new
+                {
+                    Total = total,
+                    Limit = limit,
+                    Offset = offset,
+                    HasMore = (offset + limit) < total
+                }
+            }, JsonOptions);
+        }
+        catch (ArgumentException ex)
+        {
+            return JsonSerializer.Serialize(new { error = $"Invalid regex pattern: {ex.Message}" }, JsonOptions);
+        }
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
     private TypeMetadata CreateTypeMetadata(TypeDef type) => new()
