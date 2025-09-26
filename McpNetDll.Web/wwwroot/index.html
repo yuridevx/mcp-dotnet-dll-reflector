@@ -24,9 +24,10 @@
   </style>
   <script>
     let nsLimit = 50, nsOffset = 0;
-    let currentScope = 'all';
     let selectedNamespace = null;
     let selectedTypeFullName = null;
+    let knownTypes = new Set();
+    let searchTimer = null;
 
     async function loadNamespaces() {
       const treeRes = await fetch('/api/namespaces/list');
@@ -53,7 +54,6 @@
           const a = document.createElement('a');
           a.textContent = k;
           a.href = '#ns=' + encodeURIComponent(full);
-          a.onclick = (e) => { e.preventDefault(); selectNamespace(full); };
           li.appendChild(a);
           ul.appendChild(li);
           render(node[k], full, li);
@@ -79,7 +79,7 @@
           const tEl = document.createElement('div');
           tEl.className = 'type';
           tEl.textContent = t.Name + ' [' + t.TypeKind + ']';
-          tEl.onclick = () => selectType(t.Namespace + '.' + t.Name);
+          tEl.onclick = () => { location.hash = '#type=' + encodeURIComponent(t.Namespace + '.' + t.Name); };
           list.appendChild(tEl);
         });
       });
@@ -109,7 +109,6 @@
 
     async function selectType(fullName) {
       selectedTypeFullName = fullName;
-      history.replaceState(null, '', `#type=${encodeURIComponent(fullName)}`);
       const url = new URL('/api/types', location.origin);
       url.searchParams.append('typeNames', fullName);
       const res = await fetch(url);
@@ -117,12 +116,11 @@
       renderType(json);
     }
 
-    async function search() {
-      const pattern = document.getElementById('q').value || '.*';
-      currentScope = document.getElementById('scope').value;
+    async function searchRealtime() {
+      const pattern = (document.getElementById('q').value || '').trim();
+      if (!pattern) { return; }
       const url = new URL('/api/search', location.origin);
       url.searchParams.set('pattern', pattern);
-      url.searchParams.set('scope', currentScope);
       const res = await fetch(url);
       const json = await res.json();
       renderSearch(json);
@@ -186,8 +184,10 @@
       if (lastDot > 0) {
         const ns = full.substring(0, lastDot);
         const name = full.substring(lastDot + 1);
-        const href = `#type=${encodeURIComponent(full)}`;
-        return `<a href="${href}" onclick="selectType('${full.replace(/'/g, "\\'")}'); return false;">${htmlEscape(full)}</a>`;
+        if (knownTypes.has(full)) {
+          const href = `#type=${encodeURIComponent(full)}`;
+          return `<a href="${href}">${htmlEscape(full)}</a>`;
+        }
       }
       return htmlEscape(full);
     }
@@ -197,11 +197,22 @@
       if (json.error) { out.innerHTML = `<div class="error">${json.error}</div>`; return; }
       const results = json.Results || [];
       if (!results.length) { out.textContent = 'No results'; return; }
-      let html = `<h3>${json.Summary}</h3>`;
-      html += '<table><tr><th>Type</th><th>Name</th><th>Parent</th><th>Detail</th></tr>';
+      let html = `<h3>${htmlEscape(json.Summary || 'Results')}</h3>`;
+      html += '<table><tr><th>Kind</th><th>Name</th><th>Parent Type</th><th>Detail</th></tr>';
       results.forEach(r => {
-        const detail = r.ReturnType || r.PropertyType || r.FieldType || r.Value || '';
-        html += `<tr><td>${r.ElementType}</td><td>${r.Name}</td><td>${r.ParentType ?? ''}</td><td>${detail}</td></tr>`;
+        const parent = r.ParentType || r.FullName || '';
+        const parentLink = (parent && knownTypes.has(parent)) ? `<a href="#type=${encodeURIComponent(parent)}">${htmlEscape(parent)}</a>` : htmlEscape(parent);
+        let nameCell;
+        if (r.ElementType === 'Type' && r.FullName && knownTypes.has(r.FullName)) {
+          nameCell = `<a href="#type=${encodeURIComponent(r.FullName)}">${htmlEscape(r.Name)}</a>`;
+        } else if (parent && knownTypes.has(parent)) {
+          nameCell = `<a href="#type=${encodeURIComponent(parent)}">${htmlEscape(r.Name)}</a>`;
+        } else {
+          nameCell = htmlEscape(r.Name);
+        }
+        const detailRaw = r.ReturnType || r.PropertyType || r.FieldType || r.Value || '';
+        const detail = renderTypeRef(detailRaw);
+        html += `<tr><td>${htmlEscape(r.ElementType)}</td><td>${nameCell}</td><td>${parentLink}</td><td>${detail}</td></tr>`;
       });
       html += '</table>';
       out.innerHTML = html;
@@ -209,7 +220,6 @@
 
     function selectNamespace(ns) {
       selectedNamespace = ns;
-      history.replaceState(null, '', `#ns=${encodeURIComponent(ns)}`);
       // Filter types list to this namespace
       const url = new URL('/api/namespaces', location.origin);
       url.searchParams.append('namespaces', ns);
@@ -225,7 +235,7 @@
             const tEl = document.createElement('div');
             tEl.className = 'type';
             tEl.textContent = t.Name + ' [' + t.TypeKind + ']';
-            tEl.onclick = () => selectType(t.Namespace + '.' + t.Name);
+            tEl.onclick = () => { location.hash = '#type=' + encodeURIComponent(t.Namespace + '.' + t.Name); };
             list.appendChild(tEl);
           });
           // Summary for filtered namespace
@@ -247,7 +257,20 @@
       if (type) selectType(decodeURIComponent(type));
     }
 
-    window.addEventListener('DOMContentLoaded', () => { loadNamespaces().then(handleHash); });
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const res = await fetch('/api/types/list');
+        const arr = await res.json();
+        knownTypes = new Set(arr || []);
+      } catch {}
+      await loadNamespaces();
+      handleHash();
+      const q = document.getElementById('q');
+      q.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(searchRealtime, 250);
+      });
+    });
     window.addEventListener('hashchange', handleHash);
   </script>
 </head>
@@ -255,16 +278,7 @@
   <header>
     <div class="row">
       <strong>McpNetDll</strong>
-      <input id="q" placeholder="Regex search (e.g. Get.*)" style="flex:1;max-width:320px" />
-      <select id="scope">
-        <option value="all">All</option>
-        <option value="types">Types</option>
-        <option value="methods">Methods</option>
-        <option value="properties">Properties</option>
-        <option value="fields">Fields</option>
-        <option value="enums">Enum values</option>
-      </select>
-      <button onclick="search()">Search</button>
+      <input id="q" placeholder="Search (regex, searches all)" style="flex:1;max-width:420px" />
       <input id="dll" placeholder="Path to DLL" style="max-width:320px" />
       <button onclick="loadDll()">Load DLL</button>
     </div>
