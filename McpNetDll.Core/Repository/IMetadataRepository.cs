@@ -70,3 +70,4 @@ public class PaginationInfo
     public int Offset { get; init; }
     public bool HasMore => (Offset + Limit) < Total;
 }
+

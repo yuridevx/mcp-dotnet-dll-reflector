@@ -21,11 +21,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\McpNetDll\McpNetDll.csproj" />
+    <ProjectReference Include="..\McpNetDll.Core\McpNetDll.Core.csproj" />
     <ProjectReference Include="..\MyTestLibrary\MyTestLibrary.csproj" />
   </ItemGroup>
   
   <ItemGroup>
-    <None Update="..\MyTestLibrary\bin\Debug\net9.0\MyTestLibrary.dll">
+    <None Update="..\MyTestLibrary\bin\Release\net9.0\MyTestLibrary.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

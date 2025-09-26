@@ -11,8 +11,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.5" />
     <PackageReference Include="ModelContextProtocol" Version="0.2.0-preview.3" />
-    <PackageReference Include="dnlib" Version="4.5.0" />
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\McpNetDll.Core\McpNetDll.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

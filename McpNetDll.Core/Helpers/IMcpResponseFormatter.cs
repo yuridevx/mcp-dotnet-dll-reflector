@@ -6,3 +6,4 @@ public interface IMcpResponseFormatter
     string FormatTypeDetailsResponse(Repository.TypeDetailsQueryResult result, Registry.ITypeRegistry registry);
     string FormatSearchResponse(Repository.SearchQueryResult result, Registry.ITypeRegistry registry);
 }
+

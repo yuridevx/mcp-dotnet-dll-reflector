@@ -1,32 +1,37 @@
 ﻿using Xunit;
-using McpNetDll;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Reflection;
+using McpNetDll.Registry;
+using McpNetDll.Repository;
+using McpNetDll.Helpers;
 
 namespace McpNetDll.Tests;
 
 public class ExtractorTests
 {
     private readonly string _testDllPath;
-    private readonly Extractor _extractor;
+    private readonly TypeRegistry _registry;
+    private readonly IMetadataRepository _repository;
+    private readonly IMcpResponseFormatter _formatter;
 
     public ExtractorTests()
     {
-        // Adjust the path to be relative to the test project's output directory
-        // Assuming MyTestLibrary.dll is in the same output directory as the test assembly
         var assemblyLocation = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-       _testDllPath = Path.Combine(assemblyLocation ?? "", "MyTestLibrary.dll");
+        _testDllPath = Path.Combine(assemblyLocation ?? "", "MyTestLibrary.dll");
 
-       _extractor = new Extractor();
+        _registry = new TypeRegistry();
+        _registry.LoadAssemblies(new[] { _testDllPath });
+        _repository = new MetadataRepository(_registry);
+        _formatter = new McpResponseFormatter();
     }
 
     [Fact]
     public void ListNamespaces_ShouldReturnNamespaceInfo_WhenNoFiltersAreApplied()
     {
         // Arrange & Act
-        var resultJson = _extractor.ListNamespaces(_testDllPath);
+        var resultJson = _formatter.FormatNamespaceResponse(_repository.QueryNamespaces(), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -51,7 +56,7 @@ public class ExtractorTests
         string[] namespacesFilter = { "MyTestLibrary" };
 
         // Act
-        var resultJson = _extractor.ListNamespaces(_testDllPath, namespacesFilter);
+        var resultJson = _formatter.FormatNamespaceResponse(_repository.QueryNamespaces(namespacesFilter), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -74,9 +79,9 @@ public class ExtractorTests
     public void Extractor_ShouldNotIncludeDocumentationInfo()
     {
         // Act
-        var resultJsonNamespace = _extractor.ListNamespaces(_testDllPath);
-        var resultJsonClass = _extractor.ListNamespaces(_testDllPath, new[] { "MyTestLibrary" });
-        var resultJsonMember = _extractor.GetTypeDetails(_testDllPath, new[] { "MyPublicClass" }); // Changed to use simple name
+        var resultJsonNamespace = _formatter.FormatNamespaceResponse(_repository.QueryNamespaces(), _registry);
+        var resultJsonClass = _formatter.FormatNamespaceResponse(_repository.QueryNamespaces(new[] { "MyTestLibrary" }), _registry);
+        var resultJsonMember = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(new[] { "MyPublicClass" }), _registry);
 
         var resultNamespace = JsonSerializer.Deserialize<JsonElement>(resultJsonNamespace);
         var resultClass = JsonSerializer.Deserialize<JsonElement>(resultJsonClass);
@@ -118,10 +123,10 @@ public class ExtractorTests
     public void GetTypeDetails_ShouldReturnMemberInfo_WhenFilteredByClassName()
     {
         // Arrange
-        string[] classNames = { "MyPublicClass" }; // Changed to use simple name
+        string[] classNames = { "MyPublicClass" };
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, classNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(classNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -142,7 +147,7 @@ public class ExtractorTests
         string[] classNames = { "MyPublicClass" };
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, classNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(classNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -162,13 +167,14 @@ public class ExtractorTests
         // Arrange
         var nonExistentPath = "C:\\NonExistent\\Assembly.dll";
 
-        // Act
-        var resultJson = _extractor.ListNamespaces(nonExistentPath);
-        var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
+        var registry = new TypeRegistry();
+        registry.LoadAssemblies(new[] { nonExistentPath });
+        var repo = new MetadataRepository(registry);
+        var json = new McpResponseFormatter().FormatNamespaceResponse(repo.QueryNamespaces(), registry);
+        var result = JsonSerializer.Deserialize<JsonElement>(json);
 
-        // Assert
         Assert.True(result.TryGetProperty("error", out var error));
-        Assert.Equal("Assembly file not found.", error.GetString());
+        Assert.Contains("Failed to load", error.GetString());
     }
 
 
@@ -179,7 +185,7 @@ public class ExtractorTests
         string[] classNames = { };
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, classNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(classNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -191,13 +197,10 @@ public class ExtractorTests
     public void GetTypeDetails_ShouldReturnError_WhenInvalidClassNameFormat()
     {
         // Arrange
-        // The check for class name format (containing '.') is removed from ExtractMemberInfo
-        // So this test case is no longer directly applicable. The new logic handles simple names.
-        // Instead, we will test for a truly non-existent simple class name.
         string[] classNames = { "NonExistentClassSimple" };
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, classNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(classNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -212,7 +215,7 @@ public class ExtractorTests
         string[] namespaces = { "NonExistentNamespace" };
 
         // Act
-        var resultJson = _extractor.ListNamespaces(_testDllPath, namespaces);
+        var resultJson = _formatter.FormatNamespaceResponse(_repository.QueryNamespaces(namespaces), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -227,7 +230,7 @@ public class ExtractorTests
         string[] classNames = { "NonExistentClass" }; // Changed to use simple name
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, classNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(classNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -238,7 +241,7 @@ public class ExtractorTests
     public void Extractor_ShouldIncludeEnumsAndStructsInNamespaceInfo()
     {
         // Arrange & Act
-        var resultJson = _extractor.ListNamespaces(_testDllPath);
+        var resultJson = _formatter.FormatNamespaceResponse(_repository.QueryNamespaces(), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -254,7 +257,7 @@ public class ExtractorTests
     {
         // Arrange & Act
         string[] filter = { "MyTestLibrary" };
-        var resultJson = _extractor.ListNamespaces(_testDllPath, filter);
+        var resultJson = _formatter.FormatNamespaceResponse(_repository.QueryNamespaces(filter), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -272,10 +275,10 @@ public class ExtractorTests
     public void GetTypeDetails_ShouldReturnTypeInfo_WhenFilteredBySimpleTypeName()
     {
         // Arrange
-        string[] typeNames = { "MyEnum", "MyStruct", "MyGenericClass`1" }; // Note: Generic types often have `1 for one parameter.
+        string[] typeNames = { "MyEnum", "MyStruct", "MyGenericClass`1" };
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, typeNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(typeNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -312,7 +315,7 @@ public class ExtractorTests
         string[] typeNames = { };
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, typeNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(typeNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -327,7 +330,7 @@ public class ExtractorTests
         string[] typeNames = { "NonExistentType" };
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, typeNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(typeNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -341,7 +344,7 @@ public class ExtractorTests
         string[] typeNames = { "MyTestLibrary.MyExplicitStruct" };
 
         // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, typeNames);
+        var resultJson = _formatter.FormatTypeDetailsResponse(_repository.QueryTypeDetails(typeNames), _registry);
         var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
 
         // Assert
@@ -374,46 +377,5 @@ public class ExtractorTests
         Assert.Equal("System.Int32", int2Field.GetProperty("Type").GetString());
         Assert.Equal(4, int2Field.GetProperty("Offset").GetInt32());
     }
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void ListNamespaces_ShouldReturnError_WhenPathIsNullOrEmpty(string dllPath)
-    {
-        // Act
-        var resultJson = _extractor.ListNamespaces(dllPath);
-        var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
-
-        // Assert
-        Assert.True(result.TryGetProperty("error", out var error));
-        Assert.Equal("Assembly path cannot be null or empty.", error.GetString());
-    }
-    
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void GetTypeDetails_ShouldReturnError_WhenPathIsNullOrEmpty(string dllPath)
-    {
-        // Arrange
-        string[] typeNames = { "MyPublicClass" };
-
-        // Act
-        var resultJson = _extractor.GetTypeDetails(dllPath, typeNames);
-        var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
-
-        // Assert
-        Assert.True(result.TryGetProperty("error", out var error));
-        Assert.Equal("Assembly path cannot be null or empty.", error.GetString());
-    }
-    
-    [Fact]
-    public void GetTypeDetails_ShouldReturnError_WhenTypeNamesIsNull()
-    {
-        // Act
-        var resultJson = _extractor.GetTypeDetails(_testDllPath, null);
-        var result = JsonSerializer.Deserialize<JsonElement>(resultJson);
-
-        // Assert
-        Assert.True(result.TryGetProperty("error", out var error));
-        Assert.Equal("TypeNames array cannot be empty.", error.GetString());
-    }
+    // Removed path-argument validations from old Extractor API; covered by repository/registy error flows
 }

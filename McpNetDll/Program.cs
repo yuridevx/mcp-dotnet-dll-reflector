@@ -46,8 +46,7 @@ public class Program
         builder.Services.AddSingleton<IMetadataRepository, MetadataRepository>();
         builder.Services.AddSingleton<IMcpResponseFormatter, McpResponseFormatter>();
         
-        // Keep Extractor for backward compatibility temporarily
-        builder.Services.AddSingleton(new Extractor(dllPaths));
+        // Backward compatibility extractor removed; logic now lives in TypeRegistry/Repository
         
         builder.Services
             .AddMcpServer(server => { 

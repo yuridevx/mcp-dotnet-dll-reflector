@@ -12,3 +12,4 @@ public interface ITypeRegistry
     bool TryGetType(string name, out TypeMetadata? type);
     List<string> GetLoadErrors();
 }
+

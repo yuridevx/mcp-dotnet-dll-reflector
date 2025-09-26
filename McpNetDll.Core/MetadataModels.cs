@@ -1,6 +1,5 @@
 namespace McpNetDll;
 
-// Data model for serialization
 public class AssemblyMetadata
 {
     public required string Name { get; init; }
@@ -67,3 +66,4 @@ public class StructLayoutMetadata
     public int? Pack { get; init; }
     public int? Size { get; init; }
 }
+

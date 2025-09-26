@@ -5,16 +5,8 @@ using McpNetDll.Helpers;
 
 namespace McpNetDll.Registry;
 
-/// <summary>
-/// Builds filtered <see cref="TypeMetadata"/> from dnlib <see cref="TypeDef"/>,
-/// excluding likely-obfuscated members based on an English word heuristic.
-/// </summary>
 public static class TypeMetadataFactory
 {
-    /// <summary>
-    /// Creates <see cref="TypeMetadata"/> for a given dnlib type, filtering out
-    /// methods/properties/fields/enum values with non-meaningful names.
-    /// </summary>
     public static TypeMetadata CreateTypeMetadata(TypeDef type)
     {
         var filteredMethods = GetMethods(type);
@@ -133,3 +125,5 @@ public static class TypeMetadataFactory
         return fields.Any() ? fields : null;
     }
 }
+
+
