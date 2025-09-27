@@ -115,7 +115,7 @@ public static class TypeMetadataFactory
         if (type.IsEnum) return null;
         
         var fields = type.Fields
-            .Where(f => !f.IsStatic && !f.CustomAttributes
+            .Where(f => !f.CustomAttributes
                 .Any(a => a.TypeFullName == "System.Runtime.CompilerServices.CompilerGeneratedAttribute"))
             .Select(f => new FieldMetadata
             {

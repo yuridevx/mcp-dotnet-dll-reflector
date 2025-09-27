@@ -89,7 +89,8 @@ public class TypeRegistry : ITypeRegistry
                         {
                             Name = p.Name,
                             Type = p.Type,
-                            Documentation = p.Documentation ?? doc
+                            Documentation = p.Documentation ?? doc,
+                            IsStatic = p.IsStatic
                         });
                     }
                     metadata = new TypeMetadata
