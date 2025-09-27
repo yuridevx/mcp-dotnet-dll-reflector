@@ -10,10 +10,4 @@
         <PackageReference Include="dnlib" Version="4.5.0"/>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0"/>
     </ItemGroup>
-
-    <ItemGroup>
-        <None Include="..\McpNetDll\words_alpha.txt">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-    </ItemGroup>
 </Project>
