@@ -12,15 +12,30 @@ public static class LoadEndpoints
             if (string.IsNullOrWhiteSpace(path))
                 return Results.BadRequest(new { error = "Path is required" });
 
-            registry.LoadAssembly(PathHelper.ConvertWslPath(path));
-            return Results.Json(new
+            try
             {
-                message = "Loaded",
-                path,
-                namespaces = registry.GetAllNamespaces().Count,
-                types = registry.GetAllTypes().Count,
-                errors = registry.GetLoadErrors()
-            });
+                registry.LoadAssembly(PathHelper.ConvertWslPath(path));
+                var errors = registry.GetLoadErrors();
+
+                // If there are load errors and no types were loaded, consider it a failure
+                if (errors.Any() && registry.GetAllTypes().Count == 0)
+                {
+                    return Results.BadRequest(new { error = $"Failed to load assembly: {string.Join("; ", errors)}" });
+                }
+
+                return Results.Json(new
+                {
+                    message = "Loaded",
+                    path,
+                    namespaces = registry.GetAllNamespaces().Count,
+                    types = registry.GetAllTypes().Count,
+                    errors = errors
+                });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = $"Failed to load assembly: {ex.Message}" });
+            }
         });
     }
 }

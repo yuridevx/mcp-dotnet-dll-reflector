@@ -1,4 +1,3 @@
-using McpNetDll.Helpers;
 using McpNetDll.Registry;
 using McpNetDll.Repository;
 
@@ -12,10 +11,7 @@ public static class NamespaceEndpoints
         app.MapGet("/api/namespaces/list", (ITypeRegistry registry)
             => Results.Json(registry.GetAllNamespaces()));
 
-        app.MapGet("/api/namespaces", (IMetadataRepository repo, IMcpResponseFormatter formatter,
-                ITypeRegistry registry, string[]? namespaces, int? limit, int? offset)
-            => Results.Text(
-                formatter.FormatNamespaceResponse(repo.QueryNamespaces(namespaces, limit ?? 50, offset ?? 0), registry),
-                "application/json"));
+        app.MapGet("/api/namespaces", (IMetadataRepository repo, string[]? namespaces, int? limit, int? offset)
+            => Results.Json(repo.QueryNamespaces(namespaces, limit ?? 50, offset ?? 0)));
     }
 }

@@ -131,7 +131,8 @@ public class MetadataRepository : IMetadataRepository
                     Total = total,
                     Limit = limit,
                     Offset = offset
-                }
+                },
+                Summary = $"Found {total} result{(total == 1 ? "" : "s")} for pattern '{pattern}'"
             };
         }
         catch (ArgumentException ex)

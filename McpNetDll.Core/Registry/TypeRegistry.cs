@@ -96,7 +96,11 @@ public class TypeRegistry : ITypeRegistry
         RegisterType(metadata);
 
         // Process public nested types recursively
-        foreach (var nestedType in type.NestedTypes.Where(t => t.IsNestedPublic))
+        // Include public, protected, and protected internal nested types
+        foreach (var nestedType in type.NestedTypes.Where(t =>
+            t.IsNestedPublic ||
+            t.IsNestedFamily || // protected
+            t.IsNestedFamilyOrAssembly)) // protected internal
         {
             // For nested types, use the current type's name as the parent name
             var nestedParentName = type.IsNested ? metadata.Name : type.Name.String;

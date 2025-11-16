@@ -7,6 +7,12 @@ var dlls = builder.Configuration.GetSection("DllPaths").Get<string[]>() ?? Array
 // Services
 builder.Services.AddCoreServices(dlls);
 
+// Configure JSON serialization to use PascalCase (default for .NET)
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = null; // null = PascalCase (default)
+});
+
 var app = builder.Build();
 
 // Static UI
