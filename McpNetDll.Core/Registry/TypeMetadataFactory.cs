@@ -31,7 +31,10 @@ public static class TypeMetadataFactory
 
     private static string GetTypeKind(TypeDef type)
     {
-        return type switch
+        // Add nested prefix if it's a nested type
+        var prefix = type.IsNested ? "nested " : "";
+
+        var baseKind = type switch
         {
             _ when type.IsEnum => "enum",
             _ when type.IsPrimitive => "primitive",
@@ -44,6 +47,8 @@ public static class TypeMetadataFactory
             _ when type.IsClass => "class",
             _ => "other"
         };
+
+        return prefix + baseKind;
     }
 
     private static List<MethodMetadata> GetMethods(TypeDef type)

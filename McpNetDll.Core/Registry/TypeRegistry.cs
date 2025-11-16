@@ -23,51 +23,7 @@ public class TypeRegistry : ITypeRegistry
             _xmlDocs.AddFromXml(xmlPath);
             foreach (var type in module.Types.Where(t => t.IsPublic))
             {
-                var metadata = TypeMetadataFactory.CreateTypeMetadata(type);
-                var fullTypeName = $"{metadata.Namespace}.{metadata.Name}";
-
-                // Enrich with XML docs
-                var typeDoc = _xmlDocs.GetTypeDoc(fullTypeName);
-                if (!string.IsNullOrWhiteSpace(typeDoc))
-                    metadata = metadata with { Documentation = metadata.Documentation ?? typeDoc };
-
-                if (metadata.Methods != null)
-                {
-                    var newMethods = new List<MethodMetadata>(metadata.Methods.Count);
-                    foreach (var m in metadata.Methods)
-                    {
-                        var doc = _xmlDocs.GetMethodDoc(fullTypeName, m.Name);
-                        newMethods.Add(doc is not null ? m with { Documentation = m.Documentation ?? doc } : m);
-                    }
-
-                    metadata = metadata with { Methods = newMethods };
-                }
-
-                if (metadata.Properties != null)
-                {
-                    var newProps = new List<PropertyMetadata>(metadata.Properties.Count);
-                    foreach (var p in metadata.Properties)
-                    {
-                        var doc = _xmlDocs.GetPropertyDoc(fullTypeName, p.Name);
-                        newProps.Add(doc is not null ? p with { Documentation = p.Documentation ?? doc } : p);
-                    }
-
-                    metadata = metadata with { Properties = newProps };
-                }
-
-                if (metadata.Fields != null)
-                {
-                    var newFields = new List<FieldMetadata>(metadata.Fields.Count);
-                    foreach (var f in metadata.Fields)
-                    {
-                        var doc = _xmlDocs.GetFieldDoc(fullTypeName, f.Name);
-                        newFields.Add(doc is not null ? f with { Documentation = f.Documentation ?? doc } : f);
-                    }
-
-                    metadata = metadata with { Fields = newFields };
-                }
-
-                RegisterType(metadata);
+                ProcessType(type, type.Namespace, type.Name.String);
             }
         }
         catch (Exception ex)
@@ -79,6 +35,73 @@ public class TypeRegistry : ITypeRegistry
     public void LoadAssemblies(string[] assemblyPaths)
     {
         foreach (var path in assemblyPaths) LoadAssembly(path);
+    }
+
+    private void ProcessType(TypeDef type, string parentNamespace, string parentName)
+    {
+        var metadata = TypeMetadataFactory.CreateTypeMetadata(type);
+
+        // For nested types, adjust the namespace and name
+        if (type.IsNested)
+        {
+            // Keep the parent's namespace for nested types
+            metadata = metadata with { Namespace = parentNamespace };
+            // Use the + notation for nested type names (e.g., "LokiPoe+ClientFunctions")
+            metadata = metadata with { Name = $"{parentName}+{type.Name}" };
+        }
+
+        var fullTypeName = $"{metadata.Namespace}.{metadata.Name}";
+
+        // Enrich with XML docs
+        var typeDoc = _xmlDocs.GetTypeDoc(fullTypeName);
+        if (!string.IsNullOrWhiteSpace(typeDoc))
+            metadata = metadata with { Documentation = metadata.Documentation ?? typeDoc };
+
+        if (metadata.Methods != null)
+        {
+            var newMethods = new List<MethodMetadata>(metadata.Methods.Count);
+            foreach (var m in metadata.Methods)
+            {
+                var doc = _xmlDocs.GetMethodDoc(fullTypeName, m.Name);
+                newMethods.Add(doc is not null ? m with { Documentation = m.Documentation ?? doc } : m);
+            }
+
+            metadata = metadata with { Methods = newMethods };
+        }
+
+        if (metadata.Properties != null)
+        {
+            var newProps = new List<PropertyMetadata>(metadata.Properties.Count);
+            foreach (var p in metadata.Properties)
+            {
+                var doc = _xmlDocs.GetPropertyDoc(fullTypeName, p.Name);
+                newProps.Add(doc is not null ? p with { Documentation = p.Documentation ?? doc } : p);
+            }
+
+            metadata = metadata with { Properties = newProps };
+        }
+
+        if (metadata.Fields != null)
+        {
+            var newFields = new List<FieldMetadata>(metadata.Fields.Count);
+            foreach (var f in metadata.Fields)
+            {
+                var doc = _xmlDocs.GetFieldDoc(fullTypeName, f.Name);
+                newFields.Add(doc is not null ? f with { Documentation = f.Documentation ?? doc } : f);
+            }
+
+            metadata = metadata with { Fields = newFields };
+        }
+
+        RegisterType(metadata);
+
+        // Process public nested types recursively
+        foreach (var nestedType in type.NestedTypes.Where(t => t.IsNestedPublic))
+        {
+            // For nested types, use the current type's name as the parent name
+            var nestedParentName = type.IsNested ? metadata.Name : type.Name.String;
+            ProcessType(nestedType, parentNamespace, nestedParentName);
+        }
     }
 
     public List<TypeMetadata> GetAllTypes()
