@@ -1,3 +1,4 @@
+using McpNetDll.Core.Indexing;
 using McpNetDll.Helpers;
 using McpNetDll.Registry;
 using McpNetDll.Repository;
@@ -16,6 +17,15 @@ public static class ServiceCollectionExtensions
             return registry;
         });
         services.AddSingleton<IMetadataRepository, MetadataRepository>();
+
+        // Register the indexing service
+        services.AddSingleton<IIndexingService>(sp =>
+        {
+            var typeRegistry = sp.GetRequiredService<ITypeRegistry>();
+            var indexingService = new LuceneIndexingService(typeRegistry);
+            indexingService.BuildIndex(); // Build initial index
+            return indexingService;
+        });
 
         // Register the appropriate formatter based on configuration
         if (useAiFormatter)

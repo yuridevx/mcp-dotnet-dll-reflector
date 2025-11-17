@@ -1,4 +1,5 @@
 using System.Text;
+using McpNetDll.Core.Indexing;
 using McpNetDll.Registry;
 using McpNetDll.Repository;
 
@@ -80,6 +81,51 @@ public class AiConsumptionFormatter : IMcpResponseFormatter
             foreach (var item in group)
             {
                 sb.AppendLine($"{item.FullName ?? item.Name}");
+            }
+        }
+
+        if (result.Pagination.Total > result.Results.Count)
+            sb.AppendLine($"\n// Showing {result.Results.Count}/{result.Pagination.Total} (offset: {result.Pagination.Offset})");
+
+        return sb.ToString().TrimEnd();
+    }
+
+    public string FormatKeywordSearchResponse(KeywordSearchResult result, ITypeRegistry registry)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"// Keyword search: \"{result.SearchTerms}\"");
+        sb.AppendLine($"// {result.Pagination.Total} matches found in {result.SearchTimeMs:F1}ms");
+
+        if (result.FacetCounts?.Any() == true)
+        {
+            var facets = string.Join(", ", result.FacetCounts.Select(f => $"{f.Key}: {f.Value}"));
+            sb.AppendLine($"// Distribution: {facets}");
+        }
+
+        if (!result.Results.Any())
+        {
+            sb.AppendLine("// No matches found");
+            return sb.ToString().TrimEnd();
+        }
+
+        var groupedResults = result.Results.GroupBy(r => r.ElementType);
+
+        foreach (var group in groupedResults)
+        {
+            sb.AppendLine($"\n// {group.Key} ({group.Count()}):");
+            foreach (var item in group)
+            {
+                var score = item.RelevanceScore > 0 ? $" [score: {item.RelevanceScore}]" : "";
+                var matched = item.MatchedTerms?.Any() == true ? $" (matched: {string.Join(", ", item.MatchedTerms)})" : "";
+                sb.AppendLine($"{item.FullName ?? item.Name}{score}{matched}");
+
+                if (!string.IsNullOrWhiteSpace(item.Documentation))
+                {
+                    var docPreview = item.Documentation.Length > 100
+                        ? item.Documentation.Substring(0, 97) + "..."
+                        : item.Documentation;
+                    sb.AppendLine($"  // {docPreview.Replace("\n", " ")}");
+                }
             }
         }
 

@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using McpNetDll.Core.Indexing;
 using McpNetDll.Helpers;
 using McpNetDll.Registry;
 using McpNetDll.Repository;
@@ -60,5 +61,26 @@ public static class DllMetadataTool
     {
         var result = repository.SearchElements(pattern, searchScope ?? "all", limit ?? 100, offset ?? 0);
         return formatter.FormatSearchResponse(result, registry);
+    }
+
+    [McpServerTool]
+    [Description(
+        "Performs fast keyword-based search across all indexed elements using Lucene.NET full-text search")]
+    public static string SearchByKeywords(
+        IIndexingService indexingService,
+        IMcpResponseFormatter formatter,
+        ITypeRegistry registry,
+        [Description("Space-separated keywords to search for (e.g., 'http client', 'async task', 'configuration builder')")]
+        string keywords,
+        [Description(
+            "Optional: Element types to search in. Options: 'all' (default), 'types', 'methods', 'properties', 'fields', 'enums'")]
+        string? searchScope = null,
+        [Description("Optional: Maximum number of results to return (default: 100)")]
+        int? limit = null,
+        [Description("Optional: Number of results to skip (default: 0)")]
+        int? offset = null)
+    {
+        var result = indexingService.SearchByKeywords(keywords, searchScope ?? "all", limit ?? 100, offset ?? 0);
+        return formatter.FormatKeywordSearchResponse(result, registry);
     }
 }

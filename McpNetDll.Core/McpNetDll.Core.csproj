@@ -7,7 +7,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="dnlib" Version="4.5.0"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0"/>
+        <PackageReference Include="dnlib" Version="4.5.0" />
+        <PackageReference Include="Lucene.Net" Version="4.8.0-beta00013" />
+        <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00013" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
     </ItemGroup>
 </Project>

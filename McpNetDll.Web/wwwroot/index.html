@@ -203,11 +203,27 @@
             if (!pattern) {
                 return;
             }
-            const url = new URL('/api/search', location.origin);
-            url.searchParams.set('pattern', pattern);
+            const searchType = document.getElementById('searchType').value;
+
+            let url;
+            if (searchType === 'keyword') {
+                // Use keyword search
+                url = new URL('/api/search/keywords', location.origin);
+                url.searchParams.set('keywords', pattern);
+            } else {
+                // Use regex search (default)
+                url = new URL('/api/search', location.origin);
+                url.searchParams.set('pattern', pattern);
+            }
+
             const res = await fetch(url);
             const json = await res.json();
-            renderSearch(json);
+
+            if (searchType === 'keyword') {
+                renderKeywordSearch(json);
+            } else {
+                renderSearch(json);
+            }
         }
 
         function htmlEscape(s) {
@@ -314,6 +330,74 @@
             out.innerHTML = html;
         }
 
+        function renderKeywordSearch(json) {
+            const out = document.getElementById('output');
+            if (json.error) {
+                out.innerHTML = `<div class="error">${json.error}</div>`;
+                return;
+            }
+            const results = json.Results || [];
+            if (!results.length) {
+                out.textContent = 'No results found';
+                return;
+            }
+
+            let html = `<h3>${htmlEscape(json.Summary || 'Keyword Search Results')}</h3>`;
+
+            // Show facet counts if available
+            if (json.FacetCounts) {
+                const facets = Object.entries(json.FacetCounts)
+                    .map(([type, count]) => `${type}: ${count}`)
+                    .join(' | ');
+                html += `<div style="color: #666; margin-bottom: 10px;">Found: ${facets}</div>`;
+            }
+
+            html += '<table><tr><th>Score</th><th>Kind</th><th>Name</th><th>Parent Type</th><th>Matched Terms</th></tr>';
+            results.forEach(r => {
+                const parent = r.ParentType || '';
+                const parentLink = (parent && knownTypes.has(parent))
+                    ? `<a href="#type=${encodeURIComponent(parent)}">${htmlEscape(parent)}</a>`
+                    : htmlEscape(parent);
+
+                let nameCell;
+                const fullName = r.FullName || r.Name;
+                if (r.ElementType === 'Type' && fullName && knownTypes.has(fullName)) {
+                    nameCell = `<a href="#type=${encodeURIComponent(fullName)}">${htmlEscape(r.Name)}</a>`;
+                } else if (parent && knownTypes.has(parent)) {
+                    nameCell = `<a href="#type=${encodeURIComponent(parent)}">${htmlEscape(r.Name)}</a>`;
+                } else {
+                    nameCell = htmlEscape(r.Name);
+                }
+
+                const matched = (r.MatchedTerms || []).join(', ');
+                const score = r.RelevanceScore || 0;
+
+                html += `<tr>`;
+                html += `<td>${score.toFixed(1)}</td>`;
+                html += `<td>${htmlEscape(r.ElementType)}</td>`;
+                html += `<td>${nameCell}</td>`;
+                html += `<td>${parentLink}</td>`;
+                html += `<td style="color: #0066cc;">${htmlEscape(matched)}</td>`;
+                html += `</tr>`;
+
+                // Show documentation snippet if available
+                if (r.Documentation) {
+                    const docPreview = r.Documentation.length > 150
+                        ? r.Documentation.substring(0, 150) + '...'
+                        : r.Documentation;
+                    html += `<tr><td colspan="5" style="font-size: 0.9em; color: #666; padding-left: 20px;">${htmlEscape(docPreview)}</td></tr>`;
+                }
+            });
+            html += '</table>';
+
+            // Show pagination info
+            if (json.Pagination && json.Pagination.Total > results.length) {
+                html += `<div style="margin-top: 10px; color: #666;">Showing ${results.length} of ${json.Pagination.Total} results</div>`;
+            }
+
+            out.innerHTML = html;
+        }
+
         function selectNamespace(ns) {
             selectedNamespace = ns;
             // Filter types list to this namespace
@@ -377,7 +461,11 @@
 <header>
     <div class="row">
         <strong>McpNetDll</strong>
-        <input id="q" placeholder="Search (regex, searches all)" style="flex:1;max-width:420px"/>
+        <select id="searchType" style="width: 100px;">
+            <option value="keyword">Keywords</option>
+            <option value="regex">Regex</option>
+        </select>
+        <input id="q" placeholder="Enter search terms..." style="flex:1;max-width:380px"/>
         <input id="dll" placeholder="Path to DLL" style="max-width:320px"/>
         <button onclick="loadDll()">Load DLL</button>
     </div>

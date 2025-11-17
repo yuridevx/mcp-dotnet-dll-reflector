@@ -25,5 +25,6 @@ app.MapLoadEndpoints();
 app.MapNamespaceEndpoints();
 app.MapTypeEndpoints();
 app.MapSearchEndpoints();
+app.MapKeywordSearchEndpoints();
 
 app.Run();

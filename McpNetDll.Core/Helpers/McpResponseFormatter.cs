@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using McpNetDll.Core.Indexing;
 using McpNetDll.Registry;
 using McpNetDll.Repository;
 
@@ -63,6 +64,21 @@ public class McpResponseFormatter : IMcpResponseFormatter
             LoadedAssemblyInfo = GetNamespaceInfo(registry).Trim(),
             result.Results,
             result.Pagination
+        };
+
+        return JsonSerializer.Serialize(enhancedResult, JsonOptions);
+    }
+
+    public string FormatKeywordSearchResponse(KeywordSearchResult result, ITypeRegistry registry)
+    {
+        var enhancedResult = new
+        {
+            Summary = $"Found {result.Pagination.Total} matches for '{result.SearchTerms}' in {result.SearchTimeMs:F1}ms",
+            LoadedAssemblyInfo = GetNamespaceInfo(registry).Trim(),
+            result.Results,
+            result.FacetCounts,
+            result.Pagination,
+            result.SearchTimeMs
         };
 
         return JsonSerializer.Serialize(enhancedResult, JsonOptions);
